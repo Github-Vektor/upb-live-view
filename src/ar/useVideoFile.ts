@@ -7,15 +7,30 @@ export interface VideoFileState {
   currentTime: number
   duration:    number
   speed:       number
+  loadUrl:     (url: string) => void
   openFile:    () => void
   togglePlay:  () => void
   seek:        (t: number) => void
   setSpeed:    (s: number) => void
 }
 
+function loadVideoSrc(
+  video: HTMLVideoElement,
+  src: string,
+  setHasFile: (v: boolean) => void,
+  setIsPlaying: (v: boolean) => void,
+  setCurrentTime: (v: number) => void,
+) {
+  video.src = src
+  video.load()
+  setHasFile(true)
+  setIsPlaying(false)
+  setCurrentTime(0)
+}
+
 export function useVideoFile(): VideoFileState {
-  const videoRef    = useRef<HTMLVideoElement | null>(null)
-  const objectUrl   = useRef<string | null>(null)
+  const videoRef  = useRef<HTMLVideoElement | null>(null)
+  const objectUrl = useRef<string | null>(null)
 
   const [hasFile,     setHasFile]     = useState(false)
   const [isPlaying,   setIsPlaying]   = useState(false)
@@ -46,26 +61,35 @@ export function useVideoFile(): VideoFileState {
     }
   }, [])
 
-  // Revoke previous object URL when unmounting
+  // Revoke object URL on unmount
   useEffect(() => {
     return () => { if (objectUrl.current) URL.revokeObjectURL(objectUrl.current) }
+  }, [])
+
+  const loadUrl = useCallback((url: string) => {
+    const video = videoRef.current
+    if (!video) return
+    if (objectUrl.current) {
+      URL.revokeObjectURL(objectUrl.current)
+      objectUrl.current = null
+    }
+    loadVideoSrc(video, url, setHasFile, setIsPlaying, setCurrentTime)
   }, [])
 
   const openFile = useCallback(() => {
     const input = document.createElement('input')
     input.type   = 'file'
     input.accept = 'video/*'
+    input.style.display = 'none'
+    document.body.appendChild(input)
     input.onchange = () => {
       const file  = input.files?.[0]
       const video = videoRef.current
+      document.body.removeChild(input)
       if (!file || !video) return
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
       objectUrl.current = URL.createObjectURL(file)
-      video.src         = objectUrl.current
-      video.load()
-      setHasFile(true)
-      setIsPlaying(false)
-      setCurrentTime(0)
+      loadVideoSrc(video, objectUrl.current, setHasFile, setIsPlaying, setCurrentTime)
     }
     input.click()
   }, [])
@@ -89,5 +113,5 @@ export function useVideoFile(): VideoFileState {
     setSpeedState(s)
   }, [])
 
-  return { videoRef, hasFile, isPlaying, currentTime, duration, speed, openFile, togglePlay, seek, setSpeed }
+  return { videoRef, hasFile, isPlaying, currentTime, duration, speed, loadUrl, openFile, togglePlay, seek, setSpeed }
 }

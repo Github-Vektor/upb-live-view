@@ -29,6 +29,11 @@
   padding: 0.2rem 0.1rem;
 }
 
+.test-change-btns {
+  display: flex;
+  gap: 0.75rem;
+}
+
 .test-title {
   font-size: 0.9rem;
   font-weight: 600;
@@ -76,6 +81,24 @@
 .test-empty-icon {
   font-size: 3rem;
   color: #333;
+}
+
+.test-empty-btn {
+  background: #00aaff;
+  border: none;
+  color: #000;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.55rem 1.25rem;
+  border-radius: 0.6rem;
+  cursor: pointer;
+}
+
+.test-empty-btn--secondary {
+  background: #1a1a24;
+  border: 1px solid #2a2a3a;
+  color: #888;
+  font-weight: 400;
 }
 
 /* Playback controls */

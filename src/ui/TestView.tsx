@@ -6,6 +6,7 @@ import { useLocalisation } from '../localisation/useLocalisation'
 import type { RouteStep } from '../navigation/types'
 import NavigationBar from './NavigationBar'
 import LocalisationBadge from './LocalisationBadge'
+import testVideoUrl from '../../recordings/test_hd12.mp4'
 import './TestView.css'
 
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2]
@@ -29,6 +30,11 @@ export default function TestView({
   const video       = useVideoFile()
   const localisation = useLocalisation(video.videoRef)
   const orientation  = useDeviceOrientation()
+
+  useEffect(() => {
+    video.loadUrl(testVideoUrl)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (localisation.status === 'ok' && localisation.nodeId) {
@@ -60,16 +66,16 @@ export default function TestView({
         <button className="test-back-btn" onClick={onClose}>‹ Back</button>
         <span className="test-title">Test Recording</span>
         <button className="test-open-btn" onClick={video.openFile}>
-          {video.hasFile ? 'Change file' : 'Open file'}
+          {video.hasFile ? 'Custom file' : 'Open file'}
         </button>
       </div>
 
       {/* Video + AR layer */}
       <div className="test-stage">
         {!video.hasFile ? (
-          <div className="test-empty" onClick={video.openFile}>
+          <div className="test-empty">
             <span className="test-empty-icon">▶</span>
-            <span>Tap to open a recording</span>
+            <span>Loading…</span>
           </div>
         ) : (
           <>

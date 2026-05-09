@@ -21,11 +21,17 @@ export default function LocalisationBadge({ localisation }: Props) {
     return <div className="loc-badge loc-badge--dim">No match</div>
   }
 
+  const { timing } = localisation
   const label = getNode(nodeId)?.label ?? nodeId
   return (
     <div className="loc-badge loc-badge--ok">
       <span className="loc-badge__label">{label}</span>
       <span className="loc-badge__conf">{Math.round(confidence * 100)}%</span>
+      {timing && (
+        <span className="loc-badge__latency" title={`capture ${timing.captureMs}ms · infer ${timing.inferenceMs}ms`}>
+          {timing.totalMs}ms
+        </span>
+      )}
     </div>
   )
 }

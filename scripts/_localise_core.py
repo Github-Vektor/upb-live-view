@@ -69,6 +69,9 @@ def match_count(query_descs: np.ndarray, ref_descs: np.ndarray, bf: cv2.BFMatche
 
 
 def localise(jpeg_bytes: bytes, index: list, extractor, bf: cv2.BFMatcher) -> dict:
+    import time
+    t0 = time.perf_counter()
+
     buf = np.frombuffer(jpeg_bytes, dtype=np.uint8)
     img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
     if img is None:
@@ -85,8 +88,10 @@ def localise(jpeg_bytes: bytes, index: list, extractor, bf: cv2.BFMatcher) -> di
     ]
     scores = [(g, fid, nid) for g, fid, nid in scores if g >= MIN_MATCHES]
 
+    inference_ms = round((time.perf_counter() - t0) * 1000)
+
     if not scores:
-        return {"node_id": None, "confidence": 0.0, "top": []}
+        return {"node_id": None, "confidence": 0.0, "top": [], "inference_ms": inference_ms}
 
     scores.sort(reverse=True)
     top       = scores[:TOP_K]
@@ -94,7 +99,8 @@ def localise(jpeg_bytes: bytes, index: list, extractor, bf: cv2.BFMatcher) -> di
     vote      = Counter(top_nodes).most_common(1)[0][0]
 
     return {
-        "node_id":    vote,
-        "confidence": round(top_nodes.count(vote) / len(top_nodes), 2),
-        "top": [{"frame_id": fid, "node_id": nid, "matches": g} for g, fid, nid in top],
+        "node_id":      vote,
+        "confidence":   round(top_nodes.count(vote) / len(top_nodes), 2),
+        "top":          [{"frame_id": fid, "node_id": nid, "matches": g} for g, fid, nid in top],
+        "inference_ms": inference_ms,
     }

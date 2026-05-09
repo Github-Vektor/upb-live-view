@@ -3,10 +3,17 @@ import { queryFrame, checkServerStatus } from './LocalisationService'
 
 export type LocalisationStatus = 'unavailable' | 'idle' | 'querying' | 'ok' | 'error'
 
+export interface Timing {
+  captureMs:   number
+  inferenceMs: number
+  totalMs:     number
+}
+
 export interface LocalisationState {
-  nodeId: string | null
+  nodeId:     string | null
   confidence: number
-  status: LocalisationStatus
+  status:     LocalisationStatus
+  timing:     Timing | null
 }
 
 const INTERVAL_MS  = 1500   // query every 1.5 s
@@ -42,7 +49,7 @@ export function useLocalisation(
   videoRef: React.RefObject<HTMLVideoElement | null>,
 ): LocalisationState {
   const [state, setState] = useState<LocalisationState>({
-    nodeId: null, confidence: 0, status: 'idle',
+    nodeId: null, confidence: 0, status: 'idle', timing: null,
   })
   const historyRef  = useRef<(string | null)[]>([])
   const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -55,13 +62,21 @@ export function useLocalisation(
     queryingRef.current = true
     setState(s => ({ ...s, status: 'querying' }))
     try {
-      const jpeg   = await captureJpeg(video)
-      const result = await queryFrame(jpeg)
+      const t0         = performance.now()
+      const jpeg       = await captureJpeg(video)
+      const captureMs  = Math.round(performance.now() - t0)
+      const result     = await queryFrame(jpeg)
+      const totalMs    = Math.round(performance.now() - t0)
 
       historyRef.current = [...historyRef.current.slice(-(WINDOW_SIZE - 1)), result.node_id]
       const smoothed = majority(historyRef.current)
 
-      setState({ nodeId: smoothed, confidence: result.confidence, status: 'ok' })
+      setState({
+        nodeId: smoothed,
+        confidence: result.confidence,
+        status: 'ok',
+        timing: { captureMs, inferenceMs: result.inference_ms, totalMs },
+      })
     } catch {
       setState(s => ({ ...s, status: 'error' }))
     } finally {

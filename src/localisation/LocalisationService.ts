@@ -1,8 +1,9 @@
 const SERVER = 'http://localhost:8787'
 
 export interface LocalisationResult {
-  node_id: string | null
-  confidence: number
+  node_id:      string | null
+  confidence:   number
+  inference_ms: number
 }
 
 export async function queryFrame(jpeg: Blob): Promise<LocalisationResult> {
