@@ -8,4 +8,4 @@ recordings/
 venv/
 recordings/
 
-data/
+data/feature_index.db

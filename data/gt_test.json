@@ -1,0 +1,4 @@
+{
+  "path": ["conn_4_5", "tower_4", "conn_3_4", "tower_3", "conn_2_3", "tower_2", "conn_1_2", "tower_1", "conn_0_1"],
+  "crossings_sec": [10, 24, 42, 56, 71, 86, 98, 113, 122]
+}
