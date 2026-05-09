@@ -1,0 +1,13 @@
+.schematic-map {
+  background: #0d0d16;
+  border: 1px solid #1e1e2e;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.25rem 0;
+  overflow: hidden;
+}
+
+.schematic-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}

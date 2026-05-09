@@ -1,0 +1,62 @@
+.arrival-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 200;
+  animation: arrival-fade-in 0.4s ease;
+}
+
+@keyframes arrival-fade-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.arrival-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2.5rem 2rem;
+  background: #12121a;
+  border: 1px solid rgba(0, 220, 120, 0.25);
+  border-radius: 1.25rem;
+  max-width: 18rem;
+  width: 90%;
+  text-align: center;
+}
+
+.arrival-icon {
+  font-size: 3rem;
+  line-height: 1;
+  color: #00cc66;
+}
+
+.arrival-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.arrival-dest {
+  font-size: 1rem;
+  color: #aaa;
+}
+
+.arrival-btn {
+  margin-top: 0.5rem;
+  padding: 0.65rem 2rem;
+  background: rgba(0, 200, 100, 0.2);
+  border: 1px solid rgba(0, 220, 120, 0.4);
+  border-radius: 2rem;
+  color: #afffce;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.arrival-btn:active {
+  background: rgba(0, 200, 100, 0.35);
+}

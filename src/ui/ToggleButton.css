@@ -1,0 +1,29 @@
+.toggle-btn {
+  position: fixed;
+  bottom: 2rem;
+  right: 1.5rem;
+  z-index: 100;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  transition: background 0.15s;
+}
+
+.toggle-btn:active {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.toggle-btn svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}

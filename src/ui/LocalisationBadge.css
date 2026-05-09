@@ -1,0 +1,40 @@
+.loc-badge {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 2rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  pointer-events: none;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.loc-badge--ok {
+  background: rgba(0, 180, 100, 0.25);
+  border: 1px solid rgba(0, 220, 120, 0.35);
+  color: #afffce;
+}
+
+.loc-badge--warn {
+  background: rgba(255, 160, 0, 0.2);
+  border: 1px solid rgba(255, 180, 0, 0.35);
+  color: #ffe08a;
+}
+
+.loc-badge--dim {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #888;
+}
+
+.loc-badge__conf {
+  opacity: 0.65;
+  font-size: 0.7rem;
+}

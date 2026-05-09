@@ -1,0 +1,125 @@
+.test-view {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+}
+
+/* Top bar */
+.test-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  background: rgba(10, 10, 18, 0.9);
+  border-bottom: 1px solid #1e1e2e;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.test-back-btn,
+.test-open-btn {
+  background: none;
+  border: none;
+  color: #00aaff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.2rem 0.1rem;
+}
+
+.test-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ccc;
+}
+
+/* Video stage */
+.test-stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+  min-height: 0;
+}
+
+.test-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.test-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.test-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: #555;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.test-empty-icon {
+  font-size: 3rem;
+  color: #333;
+}
+
+/* Playback controls */
+.test-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(10, 10, 18, 0.92);
+  border-top: 1px solid #1e1e2e;
+  flex-shrink: 0;
+}
+
+.test-play-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.test-time {
+  font-size: 0.75rem;
+  color: #888;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5rem;
+}
+
+.test-scrubber {
+  flex: 1;
+  accent-color: #00aaff;
+  cursor: pointer;
+  height: 3px;
+}
+
+.test-speed {
+  background: #1a1a24;
+  border: 1px solid #2a2a3a;
+  color: #aaa;
+  font-size: 0.78rem;
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.3rem;
+  cursor: pointer;
+}
