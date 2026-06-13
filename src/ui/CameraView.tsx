@@ -12,8 +12,6 @@ interface Props {
   currentStep: RouteStep | null
   stepIndex: number
   totalSteps: number
-  onNextStep: () => void
-  onPrevStep: () => void
   onCancelRoute: () => void
   onNodeDetected: (nodeId: string) => void
 }
@@ -22,8 +20,6 @@ export default function CameraView({
   currentStep,
   stepIndex,
   totalSteps,
-  onNextStep,
-  onPrevStep,
   onCancelRoute,
   onNodeDetected,
 }: Props) {
@@ -40,9 +36,11 @@ export default function CameraView({
   }, [localisation.nodeId, localisation.status, onNodeDetected])
 
   const routeHeading    = currentStep?.heading ?? 0
+  // With a live compass, steer relative to where the device is pointing.
+  // Without one (e.g. desktop), fall back to the absolute route heading.
   const relativeHeading = orientation.status === 'active'
     ? ((routeHeading - orientation.compassHeading) % 360 + 360) % 360
-    : 0
+    : routeHeading
 
   useArrowOverlay(canvasRef, {
     headingDeg: relativeHeading,
@@ -82,8 +80,6 @@ export default function CameraView({
           step={currentStep}
           stepIndex={stepIndex}
           totalSteps={totalSteps}
-          onNext={onNextStep}
-          onPrev={onPrevStep}
           onCancel={onCancelRoute}
         />
       )}

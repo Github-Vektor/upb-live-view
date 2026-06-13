@@ -23,12 +23,10 @@ interface Props {
   step: RouteStep
   stepIndex: number
   totalSteps: number
-  onNext: () => void
-  onPrev: () => void
   onCancel: () => void
 }
 
-export default function NavigationBar({ step, stepIndex, totalSteps, onNext, onPrev, onCancel }: Props) {
+export default function NavigationBar({ step, stepIndex, totalSteps, onCancel }: Props) {
   const isLast = stepIndex === totalSteps - 1
 
   return (
@@ -49,20 +47,9 @@ export default function NavigationBar({ step, stepIndex, totalSteps, onNext, onP
       </div>
 
       <div className="nav-bar__controls">
-        <button className="nav-bar__btn" onClick={onPrev} disabled={stepIndex === 0}>
-          ‹ Back
-        </button>
-        {isLast ? (
-          <button className="nav-bar__btn nav-bar__btn--cancel" onClick={onCancel}>
-            Done
-          </button>
-        ) : (
-          <button className="nav-bar__btn nav-bar__btn--next" onClick={onNext}>
-            Next ›
-          </button>
-        )}
+        {/* Advancement is automatic (localisation-driven); only cancel/done is manual. */}
         <button className="nav-bar__btn nav-bar__btn--cancel" onClick={onCancel}>
-          ✕
+          {isLast ? 'Done' : '✕ Cancel'}
         </button>
       </div>
     </div>

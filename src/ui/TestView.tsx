@@ -15,8 +15,6 @@ interface Props {
   currentStep:  RouteStep | null
   stepIndex:    number
   totalSteps:   number
-  onNextStep:   () => void
-  onPrevStep:   () => void
   onCancelRoute:() => void
   onNodeDetected:(nodeId: string) => void
   onClose:      () => void
@@ -24,7 +22,7 @@ interface Props {
 
 export default function TestView({
   currentStep, stepIndex, totalSteps,
-  onNextStep, onPrevStep, onCancelRoute, onNodeDetected, onClose,
+  onCancelRoute, onNodeDetected, onClose,
 }: Props) {
   const canvasRef   = useRef<HTMLCanvasElement | null>(null)
   const video       = useVideoFile()
@@ -51,13 +49,17 @@ export default function TestView({
   }, [localisation.nodeId, localisation.status, onNodeDetected])
 
   const routeHeading    = currentStep?.heading ?? 0
+  // With a live compass, steer relative to where the device is pointing.
+  // Without one (e.g. desktop), fall back to the absolute route heading so the
+  // arrow still turns at each corridor segment.
   const relativeHeading = orientation.status === 'active'
     ? ((routeHeading - orientation.compassHeading) % 360 + 360) % 360
-    : 0
+    : routeHeading
 
   useArrowOverlay(canvasRef, {
     headingDeg: relativeHeading,
-    visible:    currentStep !== null && video.hasFile && !video.loading && !video.error,
+    // Same rule as the live camera view: show whenever a route is active.
+    visible:    currentStep !== null,
     confidence: localisation.confidence,
   })
 
@@ -88,6 +90,17 @@ export default function TestView({
           muted
         />
         <canvas ref={canvasRef} className="test-canvas" />
+
+        {orientation.status === 'needs-permission' && (
+          <button className="compass-permission-btn" onClick={orientation.requestPermission}>
+            Enable compass
+          </button>
+        )}
+        {orientation.status === 'denied' && (
+          <div className="camera-overlay-message camera-overlay-message--warn">
+            Compass denied — arrow points forward only
+          </div>
+        )}
 
         {video.error ? (
           <div className="test-empty">
@@ -139,13 +152,11 @@ export default function TestView({
       )}
 
       {/* Navigation bar (same as live view) */}
-      {currentStep && video.hasFile && (
+      {currentStep && (
         <NavigationBar
           step={currentStep}
           stepIndex={stepIndex}
           totalSteps={totalSteps}
-          onNext={onNextStep}
-          onPrev={onPrevStep}
           onCancel={onCancelRoute}
         />
       )}

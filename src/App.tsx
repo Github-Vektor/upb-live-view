@@ -115,8 +115,6 @@ export default function App() {
           currentStep={currentStep}
           stepIndex={stepIndex}
           totalSteps={route.length}
-          onNextStep={() => setStepIndex(i => Math.min(i + 1, route.length - 1))}
-          onPrevStep={() => setStepIndex(i => Math.max(i - 1, 0))}
           onCancelRoute={handleCancelRoute}
           onNodeDetected={handleNodeDetected}
         />
@@ -125,8 +123,6 @@ export default function App() {
           currentStep={currentStep}
           stepIndex={stepIndex}
           totalSteps={route.length}
-          onNextStep={() => setStepIndex(i => Math.min(i + 1, route.length - 1))}
-          onPrevStep={() => setStepIndex(i => Math.max(i - 1, 0))}
           onCancelRoute={handleCancelRoute}
           onNodeDetected={handleNodeDetected}
           onClose={() => setView('menu')}
@@ -138,7 +134,16 @@ export default function App() {
           route={route}
           onNavigate={handleNavigate}
           onCancelRoute={handleCancelRoute}
-          onOpenTest={() => setView('test')}
+          onOpenTest={() => {
+            // Ensure the Test view always has a route so the guiding arrow shows.
+            // If nothing is active, start a demo route to the far end of the corridor.
+            if (navPhaseRef.current !== 'navigating') {
+              const demoDest = currentNodeId === 'conn_0_1' ? 'conn_4_5' : 'conn_0_1'
+              handleNavigate(demoDest, 'test')
+            } else {
+              setView('test')
+            }
+          }}
         />
       )}
 

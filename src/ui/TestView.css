@@ -101,6 +101,47 @@
   font-weight: 400;
 }
 
+/* Compass messaging — parity with the live camera view (shown on mobile only) */
+.camera-overlay-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.02em;
+}
+
+.camera-overlay-message--warn {
+  color: #ffc87a;
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.45);
+  inset: auto;
+  bottom: 5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.4rem 1rem;
+  border-radius: 0.5rem;
+  width: max-content;
+}
+
+.compass-permission-btn {
+  position: absolute;
+  bottom: 6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.6rem 1.4rem;
+  background: rgba(0, 170, 255, 0.2);
+  border: 1px solid rgba(0, 170, 255, 0.45);
+  border-radius: 2rem;
+  color: #cce8ff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 /* Playback controls */
 .test-controls {
   display: flex;

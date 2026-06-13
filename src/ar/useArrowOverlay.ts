@@ -49,26 +49,30 @@ export function useArrowOverlay(
 
     const scene  = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(60, canvas.clientWidth / canvas.clientHeight, 0.1, 100)
+    // Eye height, tilted down toward the floor ahead so the floor-projected
+    // chevrons land in the lower-centre of the frame (Google Live View style).
     camera.position.set(0, 1.6, 0)
-    camera.lookAt(0, 1.6, -1)
+    camera.lookAt(0, 0, -2.5)
 
-    // --- Arrow geometry --------------------------------------------------
-    const geo  = new THREE.ShapeGeometry(buildArrowShape())
-    const mat  = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+    // --- Arrow geometry: a row of receding floor chevrons ----------------
+    const mat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
     matRef.current = mat
+    const geo = new THREE.ShapeGeometry(buildArrowShape())
 
-    const arrowMesh = new THREE.Mesh(geo, mat)
-
-    // Subtle drop shadow: same shape, dark, slightly offset
-    const shadowMat  = new THREE.MeshBasicMaterial({ color: 0x001133, transparent: true, opacity: 0.25, side: THREE.DoubleSide })
-    const shadowMesh = new THREE.Mesh(new THREE.ShapeGeometry(buildArrowShape()), shadowMat)
-    shadowMesh.position.set(0.03, -0.03, -0.001)
-
-    // Group lies flat on virtual floor, 1.8 m ahead
+    // Group lies flat on the virtual floor ahead of the camera. Each chevron is
+    // offset along local +Y, which maps to world -Z (forward) after the tilt, so
+    // they recede into the distance pointing the way to go.
     const group = new THREE.Group()
+    const CHEVRONS = 3
+    for (let i = 0; i < CHEVRONS; i++) {
+      const chevron = new THREE.Mesh(geo, mat)
+      chevron.position.set(0, i * 0.6, 0)
+      const s = 1 - i * 0.12
+      chevron.scale.set(s, s, 1)
+      group.add(chevron)
+    }
     group.rotation.x = -Math.PI / 2   // shape's +Y → world -Z (forward)
-    group.position.set(0, 0.04, -1.8)
-    group.add(arrowMesh, shadowMesh)
+    group.position.set(0, 0.02, -1.8)
     scene.add(group)
     groupRef.current = group
 
@@ -96,13 +100,14 @@ export function useArrowOverlay(
         // headingDeg=0 → forward (-Z), 90 → right (+X), 180 → back (+Z)
         group.rotation.y = -(headingDeg * Math.PI) / 180
 
-        // Pulse scale
-        const pulse = 0.93 + 0.07 * Math.sin(t * 2.8)
+        // Pulse around a base size so the chevrons read clearly.
+        const pulse = 1.5 * (0.95 + 0.05 * Math.sin(t * 2.8))
         group.scale.set(pulse, pulse, 1)
 
-        // Opacity: base driven by confidence, modulated by slow pulse
-        const base  = 0.35 + 0.65 * Math.min(confidence, 1)
-        mat.opacity = base * (0.82 + 0.18 * Math.sin(t * 2.8))
+        // Opacity: kept clearly visible, lifted further by confidence, with a
+        // gentle pulse so it feels alive even when localisation is uncertain.
+        const base  = 0.55 + 0.45 * Math.min(confidence, 1)
+        mat.opacity = base * (0.85 + 0.15 * Math.sin(t * 2.8))
       }
 
       renderer.render(scene, camera)
