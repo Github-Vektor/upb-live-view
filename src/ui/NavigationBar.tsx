@@ -24,13 +24,15 @@ interface Props {
   stepIndex: number
   totalSteps: number
   onCancel: () => void
+  /** Render in normal flow (not absolutely positioned over the content). */
+  inline?: boolean
 }
 
-export default function NavigationBar({ step, stepIndex, totalSteps, onCancel }: Props) {
+export default function NavigationBar({ step, stepIndex, totalSteps, onCancel, inline }: Props) {
   const isLast = stepIndex === totalSteps - 1
 
   return (
-    <div className="nav-bar">
+    <div className={`nav-bar${inline ? ' nav-bar--inline' : ''}`}>
       <div className="nav-bar__progress">
         Step {stepIndex + 1} / {totalSteps}
       </div>

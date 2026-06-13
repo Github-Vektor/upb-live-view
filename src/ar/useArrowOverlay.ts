@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import type { Motion } from './useHallwayDirection'
 
 export interface ArrowOverlayOptions {
   /**
@@ -30,14 +31,18 @@ function buildArrowShape(): THREE.Shape {
 export function useArrowOverlay(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: ArrowOverlayOptions,
+  /** Optional per-frame motion offset (e.g. from visual odometry on a laptop). */
+  motionRef?: React.RefObject<Motion>,
 ) {
   const optionsRef  = useRef(options)
+  const motionStore = useRef(motionRef)
   const matRef      = useRef<THREE.MeshBasicMaterial | null>(null)
   const groupRef    = useRef<THREE.Group | null>(null)
   const clockRef    = useRef(new THREE.Clock())
   const rafRef      = useRef<number | null>(null)
 
   useEffect(() => { optionsRef.current = options }, [options])
+  useEffect(() => { motionStore.current = motionRef }, [motionRef])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -49,13 +54,13 @@ export function useArrowOverlay(
 
     const scene  = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(60, canvas.clientWidth / canvas.clientHeight, 0.1, 100)
-    // Eye height, tilted down toward the floor ahead so the floor-projected
-    // chevrons land in the lower-centre of the frame (Google Live View style).
+    // Eye height, tilted down toward the floor just ahead so the floor-projected
+    // chevrons sit low in the frame (Google Live View style).
     camera.position.set(0, 1.6, 0)
-    camera.lookAt(0, 0, -2.5)
+    camera.lookAt(0, 0, -3.0)
 
     // --- Arrow geometry: a row of receding floor chevrons ----------------
-    const mat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff7a00, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
     matRef.current = mat
     const geo = new THREE.ShapeGeometry(buildArrowShape())
 
@@ -66,13 +71,13 @@ export function useArrowOverlay(
     const CHEVRONS = 3
     for (let i = 0; i < CHEVRONS; i++) {
       const chevron = new THREE.Mesh(geo, mat)
-      chevron.position.set(0, i * 0.6, 0)
+      chevron.position.set(0, i * 0.55, 0)
       const s = 1 - i * 0.12
       chevron.scale.set(s, s, 1)
       group.add(chevron)
     }
     group.rotation.x = -Math.PI / 2   // shape's +Y → world -Z (forward)
-    group.position.set(0, 0.02, -1.8)
+    group.position.set(0, 0.02, -1.5)  // close & low in frame
     scene.add(group)
     groupRef.current = group
 
@@ -96,12 +101,23 @@ export function useArrowOverlay(
 
       group.visible = visible
       if (visible) {
-        // Correct heading: Y rotation after flat X rotation.
-        // headingDeg=0 → forward (-Z), 90 → right (+X), 180 → back (+Z)
-        group.rotation.y = -(headingDeg * Math.PI) / 180
+        // Visual-odometry offset (0 when not provided), letting the arrow react
+        // to the recording's wobble/panning frame-to-frame.
+        const motion = motionStore.current?.current
+        const yaw    = motion ? motion.yaw   : 0
+        const pitch  = motion ? motion.pitch : 0
 
-        // Pulse around a base size so the chevrons read clearly.
-        const pulse = 1.5 * (0.95 + 0.05 * Math.sin(t * 2.8))
+        // Heading + yaw: Y rotation after the flat X rotation.
+        // headingDeg=0 → forward (-Z), 90 → right (+X), 180 → back (+Z)
+        group.rotation.y = -((headingDeg + yaw) * Math.PI) / 180
+
+        // Slide toward the hallway end (same side as the lean) and tilt with it,
+        // so the chevrons feel anchored to the corridor rather than spinning.
+        group.position.x = (yaw / 35) * 0.45
+        group.position.y = 0.02 + (pitch / 18) * 0.30
+
+        // Pulse around a small base size so the chevrons read as a subtle path.
+        const pulse = 0.6 * (0.95 + 0.05 * Math.sin(t * 2.8))
         group.scale.set(pulse, pulse, 1)
 
         // Opacity: kept clearly visible, lifted further by confidence, with a

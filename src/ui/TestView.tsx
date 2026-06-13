@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { useVideoFile } from '../ar/useVideoFile'
 import { useArrowOverlay } from '../ar/useArrowOverlay'
+import { useHallwayDirection } from '../ar/useHallwayDirection'
 import { useDeviceOrientation } from '../ar/useDeviceOrientation'
 import { useLocalisation } from '../localisation/useLocalisation'
 import { testClipUrl } from '../localisation/LocalisationService'
 import type { RouteStep } from '../navigation/types'
 import NavigationBar from './NavigationBar'
 import LocalisationBadge from './LocalisationBadge'
+import VanishingPointMarker from './VanishingPointMarker'
 import './TestView.css'
 
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2]
@@ -28,6 +30,9 @@ export default function TestView({
   const video       = useVideoFile()
   const localisation = useLocalisation(video.videoRef)
   const orientation  = useDeviceOrientation()
+  // Find the end of the hallway (grid vanishing point + wobble parallax) — no
+  // compass on a laptop. `vp` drives the on-screen debug marker.
+  const { motion, vp } = useHallwayDirection(video.videoRef)
 
   // Sequential 10% windows: first clip from the first 10%, next from the next, …
   const segmentRef = useRef(0)
@@ -58,10 +63,11 @@ export default function TestView({
 
   useArrowOverlay(canvasRef, {
     headingDeg: relativeHeading,
-    // Same rule as the live camera view: show whenever a route is active.
-    visible:    currentStep !== null,
+    // Render the arrow only once the video has actually loaded and a route is active.
+    visible:    currentStep !== null && video.hasFile && !video.loading && !video.error,
     confidence: localisation.confidence,
-  })
+  // Use frame-derived motion only when there's no real compass to drive heading.
+  }, orientation.status === 'active' ? undefined : motion)
 
   function fmt(s: number) {
     const m = Math.floor(s / 60)
@@ -90,6 +96,9 @@ export default function TestView({
           muted
         />
         <canvas ref={canvasRef} className="test-canvas" />
+        {!video.loading && !video.error && (
+          <VanishingPointMarker videoRef={video.videoRef} vpRef={vp} />
+        )}
 
         {orientation.status === 'needs-permission' && (
           <button className="compass-permission-btn" onClick={orientation.requestPermission}>
@@ -151,13 +160,14 @@ export default function TestView({
         </div>
       )}
 
-      {/* Navigation bar (same as live view) */}
+      {/* Navigation bar — inline so it sits below the controls, not over them */}
       {currentStep && (
         <NavigationBar
           step={currentStep}
           stepIndex={stepIndex}
           totalSteps={totalSteps}
           onCancel={onCancelRoute}
+          inline
         />
       )}
     </div>

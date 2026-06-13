@@ -13,6 +13,15 @@
   gap: 0.6rem;
 }
 
+/* Inline variant: sits in normal layout flow (used by the Test view so it
+   doesn't overlay the playback controls). */
+.nav-bar--inline {
+  position: static;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  flex-shrink: 0;
+}
+
 .nav-bar__progress {
   font-size: 0.7rem;
   color: #888;
