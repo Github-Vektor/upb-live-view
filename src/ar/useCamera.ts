@@ -3,13 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 export type CameraStatus = 'idle' | 'requesting' | 'active' | 'error'
 
 export interface CameraState {
-  videoRef: React.RefObject<HTMLVideoElement | null>
+  videoRef: React.RefObject<HTMLVideoElement>
   status: CameraStatus
   error: string | null
 }
 
 export function useCamera(): CameraState {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<CameraStatus>('idle')
   const [error, setError] = useState<string | null>(null)
 

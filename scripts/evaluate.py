@@ -26,6 +26,8 @@ Ground truth crossings JSON format (optional, more accurate than linear interp):
     crossings_sec[i] = time (seconds) when the camera reaches path[i].
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import sys
@@ -148,7 +150,8 @@ def _print_report(path: list[str], accum: dict) -> None:
     pred_nodes = sorted({p for row in confusion.values() for p in row}, key=lambda x: (x == "<no_match>", x))
     col_w      = 10
     print("\nConfusion matrix  (rows = ground truth, cols = predicted)")
-    header = f"  {'GT \\ Pred':<20}" + "".join(f"{n[:col_w]:>{col_w}}" for n in pred_nodes)
+    gt_pred_label = "GT \\ Pred"
+    header = f"  {gt_pred_label:<20}" + "".join(f"{n[:col_w]:>{col_w}}" for n in pred_nodes)
     print(header)
     print("-" * len(header))
     for gt_node in path:

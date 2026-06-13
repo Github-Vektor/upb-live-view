@@ -3,10 +3,10 @@ import { useVideoFile } from '../ar/useVideoFile'
 import { useArrowOverlay } from '../ar/useArrowOverlay'
 import { useDeviceOrientation } from '../ar/useDeviceOrientation'
 import { useLocalisation } from '../localisation/useLocalisation'
+import { testClipUrl } from '../localisation/LocalisationService'
 import type { RouteStep } from '../navigation/types'
 import NavigationBar from './NavigationBar'
 import LocalisationBadge from './LocalisationBadge'
-import testVideoUrl from '../../recordings/test_hd12.mp4'
 import './TestView.css'
 
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2]
@@ -31,8 +31,16 @@ export default function TestView({
   const localisation = useLocalisation(video.videoRef)
   const orientation  = useDeviceOrientation()
 
+  // Sequential 10% windows: first clip from the first 10%, next from the next, …
+  const segmentRef = useRef(0)
+  function loadNextClip() {
+    const seg = segmentRef.current
+    segmentRef.current = seg + 1
+    video.loadUrl(testClipUrl(seg))
+  }
+
   useEffect(() => {
-    video.loadUrl(testVideoUrl)
+    loadNextClip()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -49,7 +57,7 @@ export default function TestView({
 
   useArrowOverlay(canvasRef, {
     headingDeg: relativeHeading,
-    visible:    currentStep !== null && video.hasFile,
+    visible:    currentStep !== null && video.hasFile && !video.loading && !video.error,
     confidence: localisation.confidence,
   })
 
@@ -65,34 +73,40 @@ export default function TestView({
       <div className="test-topbar">
         <button className="test-back-btn" onClick={onClose}>‹ Back</button>
         <span className="test-title">Test Recording</span>
-        <button className="test-open-btn" onClick={video.openFile}>
-          {video.hasFile ? 'Custom file' : 'Open file'}
-        </button>
+        <div className="test-change-btns">
+          <button className="test-open-btn" onClick={loadNextClip}>🎬 Next clip</button>
+          <button className="test-open-btn" onClick={video.openFile}>Open file</button>
+        </div>
       </div>
 
-      {/* Video + AR layer */}
+      {/* Video + AR layer — the <video> stays mounted so its ref is always live */}
       <div className="test-stage">
-        {!video.hasFile ? (
+        <video
+          ref={video.videoRef}
+          className="test-video"
+          playsInline
+          muted
+        />
+        <canvas ref={canvasRef} className="test-canvas" />
+
+        {video.error ? (
+          <div className="test-empty">
+            <span className="test-empty-icon">⚠</span>
+            <span>{video.error}</span>
+            <button className="test-empty-btn" onClick={loadNextClip}>Retry</button>
+          </div>
+        ) : video.loading ? (
           <div className="test-empty">
             <span className="test-empty-icon">▶</span>
-            <span>Loading…</span>
+            <span>Generating clip…</span>
           </div>
         ) : (
-          <>
-            <video
-              ref={video.videoRef}
-              className="test-video"
-              playsInline
-              muted
-            />
-            <canvas ref={canvasRef} className="test-canvas" />
-            <LocalisationBadge localisation={localisation} />
-          </>
+          <LocalisationBadge localisation={localisation} />
         )}
       </div>
 
       {/* Playback controls */}
-      {video.hasFile && (
+      {video.hasFile && !video.error && (
         <div className="test-controls">
           <button className="test-play-btn" onClick={video.togglePlay}>
             {video.isPlaying ? '⏸' : '▶'}

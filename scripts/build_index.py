@@ -12,6 +12,8 @@ Usage:
     python scripts/build_index.py --fps 2 --clear        # denser sampling, fresh index
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import pickle
@@ -26,6 +28,10 @@ ROOT         = Path(__file__).parent.parent
 GRAPH_PATH   = ROOT / "data" / "graph.json"
 RECORDINGS   = ROOT / "recordings"
 DB_PATH      = ROOT / "data" / "feature_index.db"
+
+# Set at runtime from --condition; the graph stores bare filenames so the same
+# graph can be indexed under any lighting-condition subfolder.
+RECORDINGS_DIR = RECORDINGS
 
 QUERY_HEIGHT = 480
 
@@ -139,7 +145,7 @@ def index_recording(
     frame_interval_sec: float,
     augment: bool,
 ) -> int:
-    path = RECORDINGS / recording
+    path = RECORDINGS_DIR / recording
     if not path.exists():
         print(f"  WARNING: {path} not found — skipping.")
         return 0
@@ -194,7 +200,15 @@ def main():
                         help="Feature extractor: orb (default) or sift")
     parser.add_argument("--augment",      action="store_true",       help="Add perspective + brightness augmentations")
     parser.add_argument("--clear",        action="store_true",       help="Delete existing index before building")
+    parser.add_argument("--condition",    type=str,   default="evening_high_light",
+                        help="Recordings subfolder / lighting condition (default: evening_high_light)")
     args = parser.parse_args()
+
+    global RECORDINGS_DIR
+    RECORDINGS_DIR = RECORDINGS / args.condition
+    if not RECORDINGS_DIR.is_dir():
+        parser.error(f"recordings condition folder not found: {RECORDINGS_DIR}")
+    print(f"Recordings: {RECORDINGS_DIR}")
 
     frame_interval_sec = 1.0 / args.fps
     extractor = make_extractor(args.feature_type, args.features)

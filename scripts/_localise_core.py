@@ -3,6 +3,8 @@ Shared localisation logic used by server.py, query.py and evaluate.py.
 Reads feature_type from DB metadata so the same index works for ORB and SIFT.
 """
 
+from __future__ import annotations
+
 import pickle
 import sqlite3
 from collections import Counter
