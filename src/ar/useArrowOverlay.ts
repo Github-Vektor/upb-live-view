@@ -60,7 +60,7 @@ export function useArrowOverlay(
     camera.lookAt(0, 0, -3.0)
 
     // --- Arrow geometry: a row of receding floor chevrons ----------------
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff7a00, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+    const mat = new THREE.MeshBasicMaterial({ color: 0x2ecc40, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
     matRef.current = mat
     const geo = new THREE.ShapeGeometry(buildArrowShape())
 
@@ -101,20 +101,15 @@ export function useArrowOverlay(
 
       group.visible = visible
       if (visible) {
-        // Visual-odometry offset (0 when not provided), letting the arrow react
-        // to the recording's wobble/panning frame-to-frame.
+        // Frame-derived heading offset (0 when not provided), so the chevrons
+        // aim at the fused hallway-end spot.
         const motion = motionStore.current?.current
-        const yaw    = motion ? motion.yaw   : 0
-        const pitch  = motion ? motion.pitch : 0
+        const yaw    = motion ? motion.yaw : 0
 
-        // Heading + yaw: Y rotation after the flat X rotation.
+        // The chevrons stay flat on the floor (parallel to the ground) — only the
+        // yaw changes, swinging the receding path toward the fused vanishing point.
         // headingDeg=0 → forward (-Z), 90 → right (+X), 180 → back (+Z)
         group.rotation.y = -((headingDeg + yaw) * Math.PI) / 180
-
-        // Slide toward the hallway end (same side as the lean) and tilt with it,
-        // so the chevrons feel anchored to the corridor rather than spinning.
-        group.position.x = (yaw / 35) * 0.45
-        group.position.y = 0.02 + (pitch / 18) * 0.30
 
         // Pulse around a small base size so the chevrons read as a subtle path.
         const pulse = 0.6 * (0.95 + 0.05 * Math.sin(t * 2.8))

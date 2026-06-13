@@ -44,10 +44,9 @@ const VP_SMOOTH  = 0.25
 const VP_GAIN    = HFOV_DEG / 2
 const VP_PITCH_G = VFOV_DEG / 2
 
-// Wobble odometry
-const SEARCH     = 4
-const DECAY      = 0.9
-const WOBBLE_G   = 0.6                     // contribution of the wobble layer
+// Wobble odometry (parallax), seeded at the grid VP
+const SEARCH       = 4
+const GRID_CORRECT = 0.08   // how strongly the fused estimate is pulled to the grid
 
 const MAX_YAW    = 40
 const MAX_PITCH  = 22
@@ -57,13 +56,28 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v))
 }
 
+// Map a yaw/pitch (degrees) back to a normalised image point, so the wobble and
+// fused estimates can be drawn as on-screen markers alongside the grid VP.
+const BASE_Y = 0.42
+function yawToX(yaw: number)   { return clamp(0.5 + (yaw / VP_GAIN) * 0.5, 0, 1) }
+function pitchToY(pitch: number) { return clamp(BASE_Y * (1 - pitch / VP_PITCH_G), 0, 1) }
+
 export function useHallwayDirection(
   videoRef: React.RefObject<HTMLVideoElement | null>,
-): { motion: React.RefObject<Motion>; vp: React.RefObject<VP> } {
-  const motionRef = useRef<Motion>({ yaw: 0, pitch: 0 })
-  const vpRef     = useRef<VP>({ x: 0.5, y: 0.42, valid: false })
-  const vpSmooth  = useRef<{ x: number; y: number }>({ x: W / 2, y: H * 0.42 })
-  const wobbleRef = useRef<{ yaw: number; pitch: number }>({ yaw: 0, pitch: 0 })
+): {
+  motion: React.RefObject<Motion>
+  grid: React.RefObject<VP>
+  wobble: React.RefObject<VP>
+  combined: React.RefObject<VP>
+} {
+  const motionRef   = useRef<Motion>({ yaw: 0, pitch: 0 })
+  const gridRef     = useRef<VP>({ x: 0.5, y: BASE_Y, valid: false })
+  const wobbleVp    = useRef<VP>({ x: 0.5, y: BASE_Y, valid: false })
+  const combinedVp  = useRef<VP>({ x: 0.5, y: BASE_Y, valid: false })
+  const vpSmooth    = useRef<{ x: number; y: number }>({ x: W / 2, y: H * BASE_Y })
+  const wobbleRef   = useRef<{ yaw: number; pitch: number }>({ yaw: 0, pitch: 0 })
+  const fusedRef    = useRef<{ yaw: number; pitch: number }>({ yaw: 0, pitch: 0 })
+  const initRef     = useRef(false)
   const prevRef   = useRef<Float32Array | null>(null)
   const rafRef    = useRef<number | null>(null)
   const lastRef   = useRef(0)
@@ -148,39 +162,74 @@ export function useHallwayDirection(
       lastRef.current = t
 
       const cur = grab()
-      if (!cur) { prevRef.current = null; vpRef.current.valid = false; return }
+      if (!cur) {
+        prevRef.current = null
+        gridRef.current.valid = false
+        wobbleVp.current.valid = false
+        combinedVp.current.valid = false
+        return
+      }
 
-      // --- (1) vanishing point ---
+      // --- (1) vanishing point from the grid ---
       const vp = estimateVP(cur)
       if (vp) {
         vpSmooth.current.x += (vp.x - vpSmooth.current.x) * VP_SMOOTH
         vpSmooth.current.y += (vp.y - vpSmooth.current.y) * VP_SMOOTH
-        vpRef.current.valid = true
+        gridRef.current.valid = true
       } else {
-        vpRef.current.valid = false
+        gridRef.current.valid = false
       }
-      vpRef.current.x = clamp(vpSmooth.current.x / W, 0, 1)
-      vpRef.current.y = clamp(vpSmooth.current.y / H, 0, 1)
+      gridRef.current.x = clamp(vpSmooth.current.x / W, 0, 1)
+      gridRef.current.y = clamp(vpSmooth.current.y / H, 0, 1)
 
       const nx = clamp((vpSmooth.current.x - W / 2) / (W / 2), -1.5, 1.5)
-      const ny = clamp((H * 0.42 - vpSmooth.current.y) / (H * 0.42), -1.2, 1.2)
+      const ny = clamp((H * BASE_Y - vpSmooth.current.y) / (H * BASE_Y), -1.2, 1.2)
       const vpYaw   = nx * VP_GAIN
       const vpPitch = ny * VP_PITCH_G
 
-      // --- (2) wobble odometry ---
+      // --- (2) wobble odometry (parallax), seeded at the grid VP ---
       const prev = prevRef.current
       prevRef.current = cur
+      let dYaw = 0, dPitch = 0
       if (prev) {
         const { dx, dy } = estimateShift(prev, cur)
-        const yawDelta   = -(HFOV_DEG * dx / W)
-        const pitchDelta = -(VFOV_DEG * dy / H)
-        wobbleRef.current.yaw   = clamp((wobbleRef.current.yaw   + yawDelta)   * DECAY, -MAX_YAW,   MAX_YAW)
-        wobbleRef.current.pitch = clamp((wobbleRef.current.pitch + pitchDelta) * DECAY, -MAX_PITCH, MAX_PITCH)
+        dYaw   = -(HFOV_DEG * dx / W)
+        dPitch = -(VFOV_DEG * dy / H)
       }
 
-      // --- combine ---
-      motionRef.current.yaw   = clamp(vpYaw   + WOBBLE_G * wobbleRef.current.yaw,   -MAX_YAW,   MAX_YAW)
-      motionRef.current.pitch = clamp(vpPitch + WOBBLE_G * wobbleRef.current.pitch, -MAX_PITCH, MAX_PITCH)
+      if (!initRef.current) {
+        // Initialise both dead-reckoning estimates AT the grid vanishing point.
+        if (gridRef.current.valid) {
+          wobbleRef.current.yaw   = vpYaw
+          wobbleRef.current.pitch = vpPitch
+          fusedRef.current.yaw    = vpYaw
+          fusedRef.current.pitch  = vpPitch
+          initRef.current = true
+        }
+      } else {
+        // Wobble: pure dead-reckoning from the grid seed (free to drift).
+        wobbleRef.current.yaw   = clamp(wobbleRef.current.yaw   + dYaw,   -MAX_YAW,   MAX_YAW)
+        wobbleRef.current.pitch = clamp(wobbleRef.current.pitch + dPitch, -MAX_PITCH, MAX_PITCH)
+
+        // Fused: dead-reckon, then correct toward the grid VP when available
+        // (complementary filter — smooth like wobble, anchored like the grid).
+        fusedRef.current.yaw   = clamp(fusedRef.current.yaw   + dYaw,   -MAX_YAW,   MAX_YAW)
+        fusedRef.current.pitch = clamp(fusedRef.current.pitch + dPitch, -MAX_PITCH, MAX_PITCH)
+        if (gridRef.current.valid) {
+          fusedRef.current.yaw   += (vpYaw   - fusedRef.current.yaw)   * GRID_CORRECT
+          fusedRef.current.pitch += (vpPitch - fusedRef.current.pitch) * GRID_CORRECT
+        }
+      }
+
+      wobbleVp.current.x = yawToX(wobbleRef.current.yaw)
+      wobbleVp.current.y = pitchToY(wobbleRef.current.pitch)
+      wobbleVp.current.valid = initRef.current
+
+      motionRef.current.yaw   = fusedRef.current.yaw
+      motionRef.current.pitch = fusedRef.current.pitch
+      combinedVp.current.x = yawToX(fusedRef.current.yaw)
+      combinedVp.current.y = pitchToY(fusedRef.current.pitch)
+      combinedVp.current.valid = initRef.current
     }
 
     rafRef.current = requestAnimationFrame(tick)
@@ -190,5 +239,5 @@ export function useHallwayDirection(
     }
   }, [videoRef])
 
-  return { motion: motionRef, vp: vpRef }
+  return { motion: motionRef, grid: gridRef, wobble: wobbleVp, combined: combinedVp }
 }

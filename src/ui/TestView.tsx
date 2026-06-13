@@ -31,8 +31,8 @@ export default function TestView({
   const localisation = useLocalisation(video.videoRef)
   const orientation  = useDeviceOrientation()
   // Find the end of the hallway (grid vanishing point + wobble parallax) — no
-  // compass on a laptop. `vp` drives the on-screen debug marker.
-  const { motion, vp } = useHallwayDirection(video.videoRef)
+  // compass on a laptop. grid/wobble/combined drive the on-screen debug markers.
+  const { motion, grid, wobble, combined } = useHallwayDirection(video.videoRef)
 
   // Sequential 10% windows: first clip from the first 10%, next from the next, …
   const segmentRef = useRef(0)
@@ -97,7 +97,11 @@ export default function TestView({
         />
         <canvas ref={canvasRef} className="test-canvas" />
         {!video.loading && !video.error && (
-          <VanishingPointMarker videoRef={video.videoRef} vpRef={vp} />
+          <>
+            <VanishingPointMarker videoRef={video.videoRef} vpRef={grid}     color="#00d0ff" label="GRID" />
+            <VanishingPointMarker videoRef={video.videoRef} vpRef={wobble}   color="#ff3da6" label="WOBBLE" />
+            <VanishingPointMarker videoRef={video.videoRef} vpRef={combined} color="#ffd400" label="FUSED" />
+          </>
         )}
 
         {orientation.status === 'needs-permission' && (

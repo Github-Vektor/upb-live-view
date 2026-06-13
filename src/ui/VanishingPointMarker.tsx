@@ -2,16 +2,20 @@ import { useEffect, useRef } from 'react'
 import type { VP } from '../ar/useHallwayDirection'
 
 /**
- * Debug overlay: draws a marker at the detected hallway vanishing point. Reads
- * the VP ref on its own animation frame (no React re-renders) and maps the
- * normalised image coords onto the letterboxed video display rect.
+ * Debug overlay: draws a labelled marker at a vanishing-point estimate. Reads the
+ * VP ref on its own animation frame (no React re-renders) and maps the normalised
+ * image coords onto the letterboxed video display rect.
  */
 export default function VanishingPointMarker({
   videoRef,
   vpRef,
+  color,
+  label,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>
   vpRef: React.RefObject<VP>
+  color: string
+  label: string
 }) {
   const dotRef = useRef<HTMLDivElement | null>(null)
 
@@ -47,8 +51,12 @@ export default function VanishingPointMarker({
   }, [videoRef, vpRef])
 
   return (
-    <div ref={dotRef} className="vp-marker">
-      <span className="vp-marker__label">END</span>
+    <div
+      ref={dotRef}
+      className="vp-marker"
+      style={{ borderColor: color, boxShadow: `0 0 8px ${color}, inset 0 0 0 4px ${color}40` }}
+    >
+      <span className="vp-marker__label" style={{ color }}>{label}</span>
     </div>
   )
 }
