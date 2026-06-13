@@ -53,21 +53,21 @@ export default function TestView({
     }
   }, [localisation.nodeId, localisation.status, onNodeDetected])
 
-  const routeHeading    = currentStep?.heading ?? 0
-  // With a live compass, steer relative to where the device is pointing.
-  // Without one (e.g. desktop), fall back to the absolute route heading so the
-  // arrow still turns at each corridor segment.
-  const relativeHeading = orientation.status === 'active'
-    ? ((routeHeading - orientation.compassHeading) % 360 + 360) % 360
-    : routeHeading
+  // This is a recording, so the device compass is irrelevant: the direction of
+  // travel is simply "into the screen" (0°) and the vanishing point provides all
+  // the steering. (Desktop browsers report orientation.status as 'active' even
+  // with no real sensor, so we must NOT gate on it here.)
+  const relativeHeading = 0
 
   useArrowOverlay(canvasRef, {
     headingDeg: relativeHeading,
     // Render the arrow only once the video has actually loaded and a route is active.
     visible:    currentStep !== null && video.hasFile && !video.loading && !video.error,
     confidence: localisation.confidence,
-  // Use frame-derived motion only when there's no real compass to drive heading.
-  }, orientation.status === 'active' ? undefined : motion)
+  }, {
+    videoRef: video.videoRef,
+    motionRef: motion,
+  })
 
   function fmt(s: number) {
     const m = Math.floor(s / 60)

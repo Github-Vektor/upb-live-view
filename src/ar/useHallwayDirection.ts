@@ -33,20 +33,21 @@ export interface VP {
 
 const W          = 96
 const H          = 54
-const Y_TOP      = Math.floor(H * 0.30)   // skip ceiling; corridor lines live below
+const Y_TOP      = Math.floor(H * 0.50)   // only the bottom half ever has floor tiles
 const Y_BOT      = Math.floor(H * 0.98)
 const MAG_THRESH = 60                     // min Sobel magnitude to count as an edge
 const HFOV_DEG   = 60
 const VFOV_DEG   = 40
 
 // Vanishing point
-const VP_SMOOTH  = 0.25
+const VP_SMOOTH  = 0.40
+const INIT_FALLBACK_TICKS = 20            // give up waiting for the grid after ~0.8 s
 const VP_GAIN    = HFOV_DEG / 2
 const VP_PITCH_G = VFOV_DEG / 2
 
 // Wobble odometry (parallax), seeded at the grid VP
 const SEARCH       = 4
-const GRID_CORRECT = 0.08   // how strongly the fused estimate is pulled to the grid
+const GRID_CORRECT = 0.15   // how strongly the fused estimate is pulled to the grid
 
 const MAX_YAW    = 40
 const MAX_PITCH  = 22
@@ -78,6 +79,8 @@ export function useHallwayDirection(
   const wobbleRef   = useRef<{ yaw: number; pitch: number }>({ yaw: 0, pitch: 0 })
   const fusedRef    = useRef<{ yaw: number; pitch: number }>({ yaw: 0, pitch: 0 })
   const initRef     = useRef(false)
+  const initTries   = useRef(0)
+  const gridSeeded  = useRef(false)
   const prevRef   = useRef<Float32Array | null>(null)
   const rafRef    = useRef<number | null>(null)
   const lastRef   = useRef(0)
@@ -119,7 +122,10 @@ export function useHallwayDirection(
           const nx = gx / len
           const ny = gy / len
           const c  = nx * x + ny * y
-          const w  = mag
+          // Prioritise lines higher up the feed (nearer the vanishing point,
+          // where the corridor lines converge most informatively).
+          const yb = (y - Y_TOP) / (Y_BOT - Y_TOP)   // 0 top → 1 bottom
+          const w  = mag * (0.6 + 0.8 * (1 - yb))
           Sxx += w * nx * nx
           Sxy += w * nx * ny
           Syy += w * ny * ny
@@ -173,8 +179,16 @@ export function useHallwayDirection(
       // --- (1) vanishing point from the grid ---
       const vp = estimateVP(cur)
       if (vp) {
-        vpSmooth.current.x += (vp.x - vpSmooth.current.x) * VP_SMOOTH
-        vpSmooth.current.y += (vp.y - vpSmooth.current.y) * VP_SMOOTH
+        if (!gridSeeded.current) {
+          // Snap to the first detection so the grid marker (and the wobble seed
+          // taken from it) start exactly on the real vanishing point.
+          vpSmooth.current.x = vp.x
+          vpSmooth.current.y = vp.y
+          gridSeeded.current = true
+        } else {
+          vpSmooth.current.x += (vp.x - vpSmooth.current.x) * VP_SMOOTH
+          vpSmooth.current.y += (vp.y - vpSmooth.current.y) * VP_SMOOTH
+        }
         gridRef.current.valid = true
       } else {
         gridRef.current.valid = false
@@ -198,12 +212,17 @@ export function useHallwayDirection(
       }
 
       if (!initRef.current) {
-        // Initialise both dead-reckoning estimates AT the grid vanishing point.
-        if (gridRef.current.valid) {
-          wobbleRef.current.yaw   = vpYaw
-          wobbleRef.current.pitch = vpPitch
-          fusedRef.current.yaw    = vpYaw
-          fusedRef.current.pitch  = vpPitch
+        // Seed both dead-reckoning estimates AT the grid vanishing point. Wait for
+        // a valid grid so the wobble truly starts on it; only fall back to centre
+        // if the grid never appears (plain/blank footage).
+        initTries.current++
+        if (gridRef.current.valid || initTries.current > INIT_FALLBACK_TICKS) {
+          const seedYaw   = gridRef.current.valid ? vpYaw   : 0
+          const seedPitch = gridRef.current.valid ? vpPitch : 0
+          wobbleRef.current.yaw   = seedYaw
+          wobbleRef.current.pitch = seedPitch
+          fusedRef.current.yaw    = seedYaw
+          fusedRef.current.pitch  = seedPitch
           initRef.current = true
         }
       } else {
