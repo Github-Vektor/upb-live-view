@@ -65,6 +65,16 @@
   pointer-events: none;
 }
 
+/* Debug: lines-only view of the vanishing-point fit */
+.test-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  z-index: 6;
+}
+
 /* Debug: detected hallway vanishing point */
 .vp-marker {
   position: absolute;

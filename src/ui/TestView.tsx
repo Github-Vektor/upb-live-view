@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useVideoFile } from '../ar/useVideoFile'
 import { useArrowOverlay } from '../ar/useArrowOverlay'
 import { useHallwayDirection } from '../ar/useHallwayDirection'
@@ -27,12 +27,15 @@ export default function TestView({
   onCancelRoute, onNodeDetected, onClose,
 }: Props) {
   const canvasRef   = useRef<HTMLCanvasElement | null>(null)
+  const linesCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [linesMode, setLinesMode] = useState(false)
   const video       = useVideoFile()
   const localisation = useLocalisation(video.videoRef)
   const orientation  = useDeviceOrientation()
   // Find the end of the hallway (grid vanishing point + wobble parallax) — no
   // compass on a laptop. grid/wobble/combined drive the on-screen debug markers.
-  const { motion, grid, wobble, combined } = useHallwayDirection(video.videoRef)
+  // The lines canvas (when mounted) gets the debug "lines only" render.
+  const { grid, wobble, combined } = useHallwayDirection(video.videoRef, linesCanvasRef)
 
   // Sequential 10% windows: first clip from the first 10%, next from the next, …
   const segmentRef = useRef(0)
@@ -61,12 +64,13 @@ export default function TestView({
 
   useArrowOverlay(canvasRef, {
     headingDeg: relativeHeading,
-    // Render the arrow only once the video has actually loaded and a route is active.
-    visible:    currentStep !== null && video.hasFile && !video.loading && !video.error,
+    // Render the arrow only once the video has loaded, a route is active, and
+    // we're not in the lines-only debug view.
+    visible:    currentStep !== null && video.hasFile && !video.loading && !video.error && !linesMode,
     confidence: localisation.confidence,
   }, {
     videoRef: video.videoRef,
-    motionRef: motion,
+    targetRef: combined,
   })
 
   function fmt(s: number) {
@@ -82,6 +86,9 @@ export default function TestView({
         <button className="test-back-btn" onClick={onClose}>‹ Back</button>
         <span className="test-title">Test Recording</span>
         <div className="test-change-btns">
+          <button className="test-open-btn" onClick={() => setLinesMode(m => !m)}>
+            {linesMode ? '🎥 Video' : '📈 Lines'}
+          </button>
           <button className="test-open-btn" onClick={loadNextClip}>🎬 Next clip</button>
           <button className="test-open-btn" onClick={video.openFile}>Open file</button>
         </div>
@@ -96,7 +103,8 @@ export default function TestView({
           muted
         />
         <canvas ref={canvasRef} className="test-canvas" />
-        {!video.loading && !video.error && (
+        {linesMode && <canvas ref={linesCanvasRef} className="test-lines" />}
+        {!video.loading && !video.error && !linesMode && (
           <>
             <VanishingPointMarker videoRef={video.videoRef} vpRef={grid}     color="#00d0ff" label="GRID" />
             <VanishingPointMarker videoRef={video.videoRef} vpRef={wobble}   color="#ff3da6" label="WOBBLE" />

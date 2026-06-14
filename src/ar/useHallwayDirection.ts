@@ -31,23 +31,23 @@ export interface VP {
   valid: boolean
 }
 
-const W          = 96
-const H          = 54
+const W          = 160
+const H          = 90
 const Y_TOP      = Math.floor(H * 0.50)   // only the bottom half ever has floor tiles
 const Y_BOT      = Math.floor(H * 0.98)
-const MAG_THRESH = 60                     // min Sobel magnitude to count as an edge
+const MAG_THRESH = 35                     // min Sobel magnitude to count as an edge
 const HFOV_DEG   = 60
 const VFOV_DEG   = 40
 
 // Vanishing point
 const VP_SMOOTH  = 0.40
-const INIT_FALLBACK_TICKS = 20            // give up waiting for the grid after ~0.8 s
+const HV_RATIO   = 2.2   // gradient-axis dominance to count an edge as H or V
 const VP_GAIN    = HFOV_DEG / 2
 const VP_PITCH_G = VFOV_DEG / 2
 
 // Wobble odometry (parallax), seeded at the grid VP
 const SEARCH       = 4
-const GRID_CORRECT = 0.15   // how strongly the fused estimate is pulled to the grid
+const GRID_CORRECT = 0.05   // low → the fused estimate leans on the wobble (parallax)
 
 const MAX_YAW    = 40
 const MAX_PITCH  = 22
@@ -65,6 +65,9 @@ function pitchToY(pitch: number) { return clamp(BASE_Y * (1 - pitch / VP_PITCH_G
 
 export function useHallwayDirection(
   videoRef: React.RefObject<HTMLVideoElement | null>,
+  /** Optional debug canvas — when mounted, the edges + vanishing point used for
+   *  the fit are drawn to it ("lines only" view). */
+  debugCanvasRef?: React.RefObject<HTMLCanvasElement | null>,
 ): {
   motion: React.RefObject<Motion>
   grid: React.RefObject<VP>
@@ -79,7 +82,6 @@ export function useHallwayDirection(
   const wobbleRef   = useRef<{ yaw: number; pitch: number }>({ yaw: 0, pitch: 0 })
   const fusedRef    = useRef<{ yaw: number; pitch: number }>({ yaw: 0, pitch: 0 })
   const initRef     = useRef(false)
-  const initTries   = useRef(0)
   const gridSeeded  = useRef(false)
   const prevRef   = useRef<Float32Array | null>(null)
   const rafRef    = useRef<number | null>(null)
@@ -90,6 +92,14 @@ export function useHallwayDirection(
     canvas.width  = W
     canvas.height = H
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+
+    // Offscreen buffer for the debug edge image (scaled up onto the visible canvas).
+    const edgeCanvas = document.createElement('canvas')
+    edgeCanvas.width  = W
+    edgeCanvas.height = H
+    const edgeCtx = edgeCanvas.getContext('2d')!
+    const edgeImg = edgeCtx.createImageData(W, H)
+    const isRed = new Uint8Array(W * H)  // vertical-line pixels, for run-length weighting
 
     const grab = (): Float32Array | null => {
       const video = videoRef.current
@@ -103,9 +113,18 @@ export function useHallwayDirection(
       return gray
     }
 
-    // (1) Weighted least-squares vanishing point of the floor/wall lines.
+    // (1) Vanishing point.
+    //  - horizontal (x): weighted least-squares convergence (the current method).
+    //  - vertical (y): LENGTH-WEIGHTED median height of the red (vertical-line)
+    //    runs — longer vertical lines count more, so the prominent grout lines
+    //    win over scattered speckle.
+    const VP_Y_MAX = H * 0.75   // keep the VP above the bottom quarter of the screen
+    const MIN_RUN  = 3          // ignore vertical runs shorter than this (speckle)
+    const runYs: number[] = []
+    const runWs: number[] = []
     const estimateVP = (gray: Float32Array): { x: number; y: number } | null => {
       let Sxx = 0, Sxy = 0, Syy = 0, bx = 0, by = 0, count = 0
+      isRed.fill(0)
       for (let y = Y_TOP + 1; y < Y_BOT - 1; y++) {
         const row = y * W
         for (let x = 1; x < W - 1; x++) {
@@ -116,14 +135,17 @@ export function useHallwayDirection(
           const gy =
             gray[i + W - 1] + 2 * gray[i + W] + gray[i + W + 1] -
             gray[i - W - 1] - 2 * gray[i - W] - gray[i - W + 1]
-          const mag = Math.abs(gx) + Math.abs(gy)
+          const ax = Math.abs(gx), ay = Math.abs(gy)
+          const mag = ax + ay
           if (mag < MAG_THRESH) continue
+
+          // Red point = vertical line (gradient mostly horizontal).
+          if (ax > ay * HV_RATIO) isRed[i] = 1
+
           const len = Math.hypot(gx, gy)
           const nx = gx / len
           const ny = gy / len
           const c  = nx * x + ny * y
-          // Prioritise lines higher up the feed (nearer the vanishing point,
-          // where the corridor lines converge most informatively).
           const yb = (y - Y_TOP) / (Y_BOT - Y_TOP)   // 0 top → 1 bottom
           const w  = mag * (0.6 + 0.8 * (1 - yb))
           Sxx += w * nx * nx
@@ -138,8 +160,41 @@ export function useHallwayDirection(
       const det = Sxx * Syy - Sxy * Sxy
       if (Math.abs(det) < 1e-3) return null
       const vx = (Syy * bx - Sxy * by) / det
-      const vy = (Sxx * by - Sxy * bx) / det
-      if (vx < -W || vx > 2 * W || vy < -H || vy > H * 1.2) return null
+      if (vx < -W || vx > 2 * W) return null
+
+      // Find vertical runs of red pixels per column; each run contributes its
+      // midpoint with weight = run length (longer line → higher weight).
+      runYs.length = 0
+      runWs.length = 0
+      let totalW = 0
+      for (let x = 0; x < W; x++) {
+        let start = -1
+        for (let y = Y_TOP; y <= Y_BOT; y++) {
+          const red = y < Y_BOT && isRed[y * W + x] === 1
+          if (red) {
+            if (start < 0) start = y
+          } else if (start >= 0) {
+            const L = y - start
+            if (L >= MIN_RUN) { runYs.push((start + y - 1) / 2); runWs.push(L); totalW += L }
+            start = -1
+          }
+        }
+      }
+
+      let vy: number
+      if (totalW > 0) {
+        // length-weighted median of the run midpoints
+        const order = runYs.map((_, k) => k).sort((a, b) => runYs[a] - runYs[b])
+        let acc = 0
+        vy = runYs[order[order.length - 1]]
+        for (const k of order) {
+          acc += runWs[k]
+          if (acc >= totalW / 2) { vy = runYs[k]; break }
+        }
+      } else {
+        vy = (Sxx * by - Sxy * bx) / det
+      }
+      vy = clamp(vy, 0, VP_Y_MAX)
       return { x: vx, y: vy }
     }
 
@@ -160,6 +215,68 @@ export function useHallwayDirection(
         }
       }
       return best
+    }
+
+    // Debug view: classify each strong edge by orientation and colour it —
+    //   RED   = vertical line   (gradient mostly horizontal)
+    //   BLUE  = horizontal line (gradient mostly vertical)
+    //   dim   = diagonal / other
+    // so horizontal vs. vertical grout structure is readable.
+    const drawDebug = (gray: Float32Array) => {
+      const dbg = debugCanvasRef?.current
+      if (!dbg) return
+      const cw = dbg.clientWidth || W
+      const ch = dbg.clientHeight || H
+      if (dbg.width !== cw || dbg.height !== ch) { dbg.width = cw; dbg.height = ch }
+      const d = dbg.getContext('2d')
+      if (!d) return
+
+      const px = edgeImg.data
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = y * W + x
+          const p = i * 4
+          let gx = 0, gy = 0
+          if (x > 0 && x < W - 1 && y > 0 && y < H - 1) {
+            gx =
+              gray[i - W + 1] + 2 * gray[i + 1] + gray[i + W + 1] -
+              gray[i - W - 1] - 2 * gray[i - 1] - gray[i + W - 1]
+            gy =
+              gray[i + W - 1] + 2 * gray[i + W] + gray[i + W + 1] -
+              gray[i - W - 1] - 2 * gray[i - W] - gray[i - W + 1]
+          }
+          const ax = Math.abs(gx), ay = Math.abs(gy)
+          const mag = ax + ay
+          let r = 0, g = 0, b = 0
+          if (mag >= MAG_THRESH) {
+            const v = Math.min(255, mag * 0.6)
+            if (ax > ay * HV_RATIO)      { r = v }               // vertical line
+            else if (ay > ax * HV_RATIO) { b = v }               // horizontal line
+            else                          { g = v * 0.35 }        // diagonal — dim
+          }
+          px[p] = r; px[p + 1] = g; px[p + 2] = b; px[p + 3] = 255
+        }
+      }
+      edgeCtx.putImageData(edgeImg, 0, 0)
+
+      d.imageSmoothingEnabled = false
+      d.clearRect(0, 0, cw, ch)
+      d.drawImage(edgeCanvas, 0, 0, W, H, 0, 0, cw, ch)
+
+      // fitted vanishing point (x = least-squares, y = median vertical-line height)
+      const vx = gridRef.current.x * cw
+      const vy = gridRef.current.y * ch
+      d.strokeStyle = gridRef.current.valid ? '#ffd400' : 'rgba(255,212,0,0.4)'
+      d.lineWidth = 2
+      d.beginPath(); d.arc(vx, vy, 9, 0, Math.PI * 2); d.stroke()
+      d.beginPath(); d.moveTo(vx - 14, vy); d.lineTo(vx + 14, vy)
+      d.moveTo(vx, vy - 14); d.lineTo(vx, vy + 14); d.stroke()
+
+      // legend
+      d.font = '12px sans-serif'
+      d.fillStyle = '#ff5050'; d.fillText('■ vertical', 8, 18)
+      d.fillStyle = '#5080ff'; d.fillText('■ horizontal', 8, 34)
+      d.fillStyle = '#ffd400'; d.fillText('+ VP', 8, 50)
     }
 
     const tick = (t: number) => {
@@ -212,19 +329,13 @@ export function useHallwayDirection(
       }
 
       if (!initRef.current) {
-        // Seed both dead-reckoning estimates AT the grid vanishing point. Wait for
-        // a valid grid so the wobble truly starts on it; only fall back to centre
-        // if the grid never appears (plain/blank footage).
-        initTries.current++
-        if (gridRef.current.valid || initTries.current > INIT_FALLBACK_TICKS) {
-          const seedYaw   = gridRef.current.valid ? vpYaw   : 0
-          const seedPitch = gridRef.current.valid ? vpPitch : 0
-          wobbleRef.current.yaw   = seedYaw
-          wobbleRef.current.pitch = seedPitch
-          fusedRef.current.yaw    = seedYaw
-          fusedRef.current.pitch  = seedPitch
-          initRef.current = true
-        }
+        // Initialise the dead-reckoning estimates at the CENTRE of the screen
+        // (yaw 0, pitch 0); the grid correction then pulls them toward the VP.
+        wobbleRef.current.yaw   = 0
+        wobbleRef.current.pitch = 0
+        fusedRef.current.yaw    = 0
+        fusedRef.current.pitch  = 0
+        initRef.current = true
       } else {
         // Wobble: pure dead-reckoning from the grid seed (free to drift).
         wobbleRef.current.yaw   = clamp(wobbleRef.current.yaw   + dYaw,   -MAX_YAW,   MAX_YAW)
@@ -249,6 +360,8 @@ export function useHallwayDirection(
       combinedVp.current.x = yawToX(fusedRef.current.yaw)
       combinedVp.current.y = pitchToY(fusedRef.current.pitch)
       combinedVp.current.valid = initRef.current
+
+      drawDebug(cur)
     }
 
     rafRef.current = requestAnimationFrame(tick)

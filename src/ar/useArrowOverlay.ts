@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import type { Motion } from './useHallwayDirection'
+import type { VP } from './useHallwayDirection'
 
 export interface ArrowOverlayOptions {
   /**
@@ -17,8 +17,8 @@ export interface ArrowOverlayExtras {
   /** Video element — the canvas is fitted to its letterboxed rect so screen
    *  space matches the video (and any debug markers drawn over it). */
   videoRef?: React.RefObject<HTMLVideoElement | null>
-  /** Fused yaw/pitch (degrees) the chevrons should rotate by. */
-  motionRef?: React.RefObject<Motion>
+  /** Fused vanishing point (normalised image coords) the chevrons should aim at. */
+  targetRef?: React.RefObject<VP>
 }
 
 function buildArrowShape(): THREE.Shape {
@@ -79,10 +79,15 @@ export function useArrowOverlay(
     for (let i = 0; i < CHEVRONS; i++) {
       const chevron = new THREE.Mesh(geo, mat)
       chevron.position.set(0, (i - (CHEVRONS - 1) / 2) * SPACING, 0)  // …,-SP, 0, +SP
+      chevron.rotation.z = Math.PI  // flip the arrowheads 180°
       const s = 1 - 0.12 * Math.abs(i - (CHEVRONS - 1) / 2)
       chevron.scale.set(s, s, 1)
       path.add(chevron)
     }
+
+    // Tip (+Y) maps to the pivot's forward (-Z); the chevrons recede forward and
+    // the pivot is aimed (lookAt) at the target, so they point at it.
+    path.rotation.x = -Math.PI / 2
 
     const pivot = new THREE.Group()
     pivot.add(path)
@@ -92,8 +97,9 @@ export function useArrowOverlay(
     // the bottom third (screen y ≈ 0.833 → NDC y).
     const ANCHOR_NDC_Y = -(0.833 * 2 - 1)
     const ANCHOR_DIST  = 2.5
-    const _v   = new THREE.Vector3()
-    const _dir = new THREE.Vector3()
+    const _v      = new THREE.Vector3()
+    const _dir    = new THREE.Vector3()
+    const _target = new THREE.Vector3()
 
     // Fit the canvas to the video's letterboxed display rect (so the 3D scene
     // shares coordinates with the video image), or fill the parent if no video.
@@ -142,17 +148,20 @@ export function useArrowOverlay(
         _dir.copy(_v).sub(camera.position).normalize()
         pivot.position.copy(camera.position).addScaledVector(_dir, ANCHOR_DIST)
 
-        // Rotate by the fused yaw/pitch (degrees), amplified so the chevrons
-        // visibly swing/tilt even for modest hallway-end deviations.
-        const motion = extrasRef.current?.motionRef?.current
-        const yaw    = (motion ? motion.yaw : 0) * 1.8
-        const pitch  = (motion ? motion.pitch : 0) * 1.8
-
-        // Yaw about the pivot's vertical axis (middle chevron is on that axis → stays put).
-        // headingDeg=0 → forward, +yaw → toward a hall-end on the right.
-        pivot.rotation.y = -((headingDeg + yaw) * Math.PI) / 180
-        // Pitch about path's X axis through the origin (middle chevron stays put).
-        path.rotation.x = -Math.PI / 2 + THREE.MathUtils.degToRad(THREE.MathUtils.clamp(pitch, -32, 32))
+        // Aim the chevrons at the fused vanishing point: unproject it to a world
+        // point and lookAt it, so the receding path points exactly at the marker.
+        const target = extrasRef.current?.targetRef?.current
+        if (target && target.valid) {
+          _v.set(target.x * 2 - 1, -(target.y * 2 - 1), 0.5).unproject(camera)
+          _dir.copy(_v).sub(camera.position).normalize()
+          _target.copy(camera.position).addScaledVector(_dir, 10)
+        } else {
+          // No target (e.g. live camera view): point forward per the route heading.
+          const th = THREE.MathUtils.degToRad(headingDeg)
+          _target.set(Math.sin(th) * 0.95, -0.29, -Math.cos(th) * 0.95)
+            .multiplyScalar(10).add(pivot.position)
+        }
+        pivot.lookAt(_target)
 
         // Pulse around a base size (about the origin, so the middle stays fixed).
         const pulse = 0.7 * (0.95 + 0.05 * Math.sin(t * 2.8))
