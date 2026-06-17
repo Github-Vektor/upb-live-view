@@ -4,3 +4,5 @@ tqdm>=4.65
 fastapi>=0.111
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
+imageio>=2.34
+imageio-ffmpeg>=0.5

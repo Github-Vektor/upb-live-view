@@ -10,11 +10,13 @@ Usage:
 """
 
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 import cv2
+import imageio_ffmpeg
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,39 +72,49 @@ def test_clip(background_tasks: BackgroundTasks, segment: int = 0):
     if not TEST_VIDEO.exists():
         return JSONResponse({"error": f"test video not found: {TEST_VIDEO}"}, status_code=404)
 
+    # Read only metadata (fast) to find the window start time.
     cap = cv2.VideoCapture(str(TEST_VIDEO))
     fps   = cap.get(cv2.CAP_PROP_FPS) or 30.0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    clip_frames = int(fps * CLIP_SECONDS)
+    cap.release()
+    duration = (total / fps) if total > 0 else 0.0
 
     # Start at the window boundary, clamped so a full clip fits inside the video.
-    seg   = segment % N_SEGMENTS
-    start = min(int(seg / N_SEGMENTS * total), max(0, total - clip_frames))
-
-    cap.set(cv2.CAP_PROP_POS_FRAMES, start)
-    ret, frame = cap.read()
-    if not ret:
-        cap.release()
-        return JSONResponse({"error": "could not read source video"}, status_code=500)
-
-    h, w = frame.shape[:2]
-    size = (int(w * CLIP_HEIGHT / h), CLIP_HEIGHT)
+    seg = segment % N_SEGMENTS
+    start_sec = (seg / N_SEGMENTS) * duration
+    if duration > CLIP_SECONDS:
+        start_sec = min(start_sec, duration - CLIP_SECONDS)
+    start_sec = max(0.0, start_sec)
 
     fd, path = tempfile.mkstemp(suffix=".mp4")
     os.close(fd)
-    writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"avc1"), fps, size)
 
-    written = 0
-    while ret and written < clip_frames:
-        writer.write(cv2.resize(frame, size))
-        written += 1
-        ret, frame = cap.read()
+    # Let the bundled ffmpeg (imageio-ffmpeg) cut + downscale + re-encode the
+    # clip directly. Fast input seek (-ss before -i) means it decodes only the
+    # needed window, not the whole 4K file; scale=-2:H keeps the aspect ratio
+    # with an even width (required by libx264/yuv420p); +faststart lets the
+    # browser start playing immediately. This avoids both the slow per-frame
+    # Python loop and the Windows OpenH264 DLL dependency of cv2.VideoWriter.
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    cmd = [
+        ff, "-y",
+        "-ss", f"{start_sec:.3f}",
+        "-i", str(TEST_VIDEO),
+        "-t", str(CLIP_SECONDS),
+        "-vf", f"scale=-2:{CLIP_HEIGHT}",
+        "-an",
+        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "-v", "error",
+        path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not os.path.getsize(path):
+        if os.path.exists(path):
+            os.remove(path)
+        return JSONResponse({"error": f"ffmpeg failed: {result.stderr[:500]}"}, status_code=500)
 
-    writer.release()
-    cap.release()
-
-    start_sec = start / fps
-    print(f"/test-clip: {written} frames from {start_sec:.1f}s, {size[0]}x{size[1]} → {path}")
+    print(f"/test-clip: seg {seg} from {start_sec:.1f}s, scale -2:{CLIP_HEIGHT} → {path}")
     background_tasks.add_task(os.remove, path)
     return FileResponse(path, media_type="video/mp4", headers={"Cache-Control": "no-store"})
 

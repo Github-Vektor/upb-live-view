@@ -6,6 +6,15 @@ recordings/
 *.local
 
 venv/
-recordings/
+recordings.zip
 
 data/feature_index.db
+
+# Fișiere generate de asistent (planificare lucrare + figuri capitol 4)
+plan_sectiuni_lucrare.md
+cap4_solutia_propusa_detaliat.md
+cap4_solutia_propusa_draft.md
+cap4_solutia_propusa.tex
+figuri_cap4_ghid.md
+figuri/
+scripts/make_graph_figure.py
