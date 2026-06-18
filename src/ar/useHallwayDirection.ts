@@ -139,8 +139,13 @@ export function useHallwayDirection(
           const mag = ax + ay
           if (mag < MAG_THRESH) continue
 
-          // Red point = vertical line (gradient mostly horizontal).
-          if (ax > ay * HV_RATIO) isRed[i] = 1
+          // Vertical line (gradient mostly horizontal): keep it for the
+          // vertical-run height estimate below, but EXCLUDE it from the
+          // horizontal vanishing-point fit. Door/window frames are vertical in
+          // 3D and converge to a vertical VP, not the corridor's end, so
+          // including them drags vx toward whichever wall carries more frames
+          // (the door side of the corridor).
+          if (ax > ay * HV_RATIO) { isRed[i] = 1; continue }
 
           const len = Math.hypot(gx, gy)
           const nx = gx / len
@@ -157,6 +162,19 @@ export function useHallwayDirection(
         }
       }
       if (count < 30) return null
+
+      // Gentle centre prior on the horizontal vanishing point: a soft "vx is
+      // near the image centre" vote, weighted as a small fraction of the
+      // accumulated edge evidence. On a straight corridor the true VP is near
+      // centre, so this resolves ambiguity and stops any remaining one-sided
+      // clutter (e.g. a cluster of diagonal door edges) from swinging vx to a
+      // wall — without overriding a genuinely off-centre VP when the evidence
+      // is strong. Tune via REG_FRAC (0 = off).
+      const REG_FRAC = 0.18
+      const reg = REG_FRAC * Sxx
+      Sxx += reg
+      bx  += reg * (W / 2)
+
       const det = Sxx * Syy - Sxy * Sxy
       if (Math.abs(det) < 1e-3) return null
       const vx = (Syy * bx - Sxy * by) / det

@@ -1,0 +1,137 @@
+\chapter{Detalii de implementare}
+Acest capitol complementează arhitectura descrisă în capitolul precedent cu decizii concrete și părți de implementare care au constituit provocări semnificative, și urmărește aceeași structură cu soluția propriu-zisă: tehnologiile folosite și structura proiectului (5.1), camera din browser și transmisia cadrelor (5.2), construcția offline a indexului de referință (5.3), serviciul de localizare online (5.4), sistemul de rutare și logica de ghidare (5.5), săgeata în realitatea augmentată (5.6), și suita de testare, unde a fost nevoie de cel mai mare efort de implementare (5.7).
+\section{Tehnologiile folosite și structura proiectului}
+Partea de client este o aplicație monopagică scrisă în TypeScript cu React și integrată prin Vite. Partea de server este un serviciu de Python construit cu FastAPI și servit de Uvicorn, în timp ce indexul de referință este un singur fișier într-o bază de date SQLite. Această împărțire păstrează procesele ieftine computațional pe dispozitiv și cele intensive computațional pe server.
+O constrângere practică care a determinat semnificativ procesul de dezvoltare: browserele permit accesul la cameră prin \texttt{getUserMedia} printr-o conexiune securizată (HTTPS). În acest scop serverul de Vite este configurat cu un certificat cu semnătură proprie, și rutele de API (\texttt{/localise}, \texttt{/status}, \texttt{/test-clip}) sunt redirecționate către serviciul Python prin HTTP. Prin urmare, browserul vorbește doar cu endpoint-ul de HTTPS, și astfel evit blocarea conținutului mixt care se întâmplă când conectăm o pagină securizată la un server nesecurizat.
+Componentele esențiale sunt separate în directoare specifice: în \texttt{src/ar/} se află componentele de cameră, orientarea dispozitivului și redarea săgeților, în \texttt{src/navigation/} este definit graful și algoritmul de rutare și în \texttt{src/ui/} sunt grupate componentele de React. Componentele offline sunt separate, aflându-se în \texttt{scripts/} (\texttt{build\_index.py}, \texttt{server.py} și fisierul comun \texttt{\_localise\_core.py}), astfel încât pipeline-ul care generează modelul clădirii este complet decuplat de aplicație la timpul de execuție.
+\section{Camera și transmisia cadrelor}
+Pe partea de client, o interogare este transmisă la intervale fixe pentru a reduce numărul de cicluri complete de comunicație în rețea și numărul de cadre procesate pe server. La fiecare $1.5$ secunde cadrul curent este transferat în afara ecranului, redus la o înălțime de $480$ de pixeli și encodat sub formă de JPEG înainte de a fi transmis la server. Reducerea rezoluției și compresia JPEG sunt aplicate pe partea de client specific pentru a reduce dimensiunea de upload și a reduce latența. Figura~\ref{fig:capture} arată procedeul de captură împreună cu agregarea temporală descrisă în secțiunea~5.4.
+\begin{figure}[htbp]
+  \centering
+\begin{lstlisting}[language=TypeScript]
+function captureJpeg(video: HTMLVideoElement): Promise<Blob> {
+  const scale  = CAPTURE_H / video.videoHeight   // CAPTURE_H = 480
+  const w      = Math.round(video.videoWidth * scale)
+  const canvas = document.createElement('canvas')
+  canvas.width = w; canvas.height = CAPTURE_H
+  canvas.getContext('2d')!.drawImage(video, 0, 0, w, CAPTURE_H)
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(b => b ? resolve(b) : reject(), 'image/jpeg', 0.82))
+}
+function majority(arr: (string | null)[]): string | null {
+  const counts = new Map<string, number>()
+  for (const v of arr) if (v) counts.set(v, (counts.get(v) ?? 0) + 1)
+  let best: string | null = null, bestN = 0
+  for (const [k, n] of counts) if (n > bestN) { best = k; bestN = n }
+  return best
+}
+\end{lstlisting}
+  \caption{Captarea cadrelor de către client și agregarea temporală}
+  \label{fig:capture}
+\end{figure}
+\section{Construcția indexului de referință (Offline)}
+Scriptul asociat citește topologia de navigare, deschide înregistrările nodurilor și extrage cadre la o rată configurabilă (implicit 1 cadru per secundă). Fiecare cadru este convertit în tonuri de gri și redimensionat la o înălțime de $480$ de pixeli (aceeași dimensiune ca cea a interogării), astfel încât descriptorii indexați și cei extrași în timp real sunt direct compatibili. Apoi, în baza fiecărui cadru în parte, constructorul extrage caracteristicile locale și stochează descriptorii, punctele cheie și identificatorul nodului de origine în baza de date.
+Extractorul de caracteristici este selectabil, opțiunile fiind ORB sau SIFT, tipul ales fiind stocat în cadrul indexului, într-o secțiune de metadate. Aceasta permite separarea procesului de extragere de rulare, deoarece serviciul de localizare citește metadatele și configurează distanța dinamic, fără a fi schimbat codul. Pentru a compensa un număr redus de cadre dintr-o singură extragere, constructorul poate injecta variante augmentate ale fiecărui cadru în parte, simulând diferite unghiuri și condiții de lumină. În Figura~\ref{fig:augment} se regăsesc aceste augmentări.
+\begin{figure}[htbp]
+  \centering
+\begin{lstlisting}[language=Python]
+def _tilt_down(gray, strength):       # perspective warp, camera tilted down
+    h, w = gray.shape; s = strength
+    src = np.float32([[0,0],[w,0],[w,h],[0,h]])
+    dst = np.float32([[s*w,s*h],[w*(1-s),s*h],[w,h],[0,h]])
+    return cv2.warpPerspective(gray, cv2.getPerspectiveTransform(src, dst), (w, h))
+def _brightness(gray, factor):
+    return np.clip(gray.astype(np.float32) * factor, 0, 255).astype(np.uint8)
+AUGMENTATIONS = [
+    ("tilt_low",     lambda g: _tilt_down(g, 0.12)),
+    ("tilt_mid",     lambda g: _tilt_down(g, 0.22)),
+    ("bright_dark",  lambda g: _brightness(g, 0.75)),
+    ("bright_light", lambda g: _brightness(g, 1.30)),
+]
+\end{lstlisting}
+  \caption{Augmentări offline injectate în index (build\_index.py).}
+  \label{fig:augment}
+\end{figure}
+\section{Serviciul de localizare (Online)}
+La fiecare interogare serverul decodează JPEG-ul primit, extrage descriptorii cu același extractor definit în metadata, și îi potrivește cu fiecare cadru indexat. Potrivirea este de tip brute-force bazată pe cei mai apropiați $k$ vecini ($k=2$) și raport Lowe, cu un prag de $0,75$. Astfel elimin corespondențele ambigue, impunând similitudinea cu un grup de cadre. Numărul de potriviri valabile rămase reprezintă scorul acelui cadru specific, iar cadrele cu un număr de potriviri mai mic decât un anumit prag sunt eliminate.
+Serviciul păstrează primele 5 cadre cu cel mai mare scor, iar nodul cu cele mai multe potriviri este ales. Gradul de încredere este calculat ca și raport între numărul de cadre potrivite și numărul de cadre candidate, reprezentând astfel intuitiv corectitudinea plasării. Figura~\ref{fig:vote} prezintă logica de bază pentru calculul scorului și algoritmul de votare.
+\begin{figure}[H]
+  \centering
+\begin{lstlisting}[language=Python]
+def match_count(query_descs, ref_descs, bf):
+    raw = bf.knnMatch(query_descs, ref_descs, k=2)
+    return sum(1 for p in raw
+               if len(p) == 2 and p[0].distance < LOWE_RATIO * p[1].distance)
+# ... score every indexed frame, keep those with >= MIN_MATCHES, sort desc ...
+top       = scores[:TOP_K]                       # TOP_K = 5
+top_nodes = [nid for _, _, nid in top]
+vote      = Counter(top_nodes).most_common(1)[0][0]
+confidence = round(top_nodes.count(vote) / len(top_nodes), 2)
+\end{lstlisting}
+  \caption{Numărarea potrivirilor și calculul scorului de încredere (\_localise\_core.py).}
+  \label{fig:vote}
+\end{figure}
+O a doua selecție are loc pe partea de client. Din cauza faptului că interogările individuale pot varia rapid pe porțiuni similare, fără trăsături unice, folosesc o fereastră de estimări compusă din ultimele 5 rezultate și îl raportez pe cel majoritar (funcția de majoritate \texttt{majority} din Figura~\ref{fig:capture}). Aceste două mecanisme asigură stabilitatea estimării nodului curent al utilizatorului.
+\section{Sistemul de rutare și logica de ghidare}
+Rutarea este construită cu algoritmul lui Dijkstra cu ponderi care folosește distanțele asociate muchiilor ca și cost. Cea mai scurtă cale este astfel lista nodurilor din drumul de cost minim, care nu este returnată direct interfeței. Aceasta este convertită într-o serie de pași de navigare, fiecare având nod sursă și nod destinație, direcție de deplasare, distanță și acțiunea utilizatorului.
+Acțiunea este determinată din diferența unghiurilor (față de nord) a două muchii consecutive. O diferență apropiată de 0 rezultă într-o acțiune de tip \emph{continuă}, o diferență semnificativă rezultă într-un viraj, iar în cazul în care sunt diametral opuse, recomandarea este de tip \emph{întoarcere}. Pasul final este mereu de tip \emph{sosire}. Figura~\ref{fig:action} arată această mapare.
+\begin{figure}[H]
+  \centering
+\begin{lstlisting}[language=TypeScript]
+function headingDiff(from: number, to: number): number {
+  let diff = ((to - from) % 360 + 360) % 360
+  return diff > 180 ? diff - 360 : diff
+}
+function actionFromHeadings(incoming: number | null, outgoing: number): StepAction {
+  if (incoming === null) return 'start'
+  const diff = headingDiff(incoming, outgoing)
+  if (Math.abs(diff) <= 30)            return 'continue'
+  if (diff > 30  && diff <= 150)       return 'turn-right'
+  if (diff < -30 && diff >= -150)      return 'turn-left'
+  return 'turn-around'
+}
+\end{lstlisting}
+  \caption{Determinarea unei instrucțiuni de viraj pe baza a două orientări consecutive (routing.ts).}
+  \label{fig:action}
+\end{figure}
+În timpul navigării aplicația comută automat între pașii din această secvență. Când localizarea detectează următorul nod din traseu, pasul curent este marcat drept finalizat, iar următorul pas este încărcat fără interacțiunea utilizatorului. Ajungerea la nodul destinație declanșează o confirmare, iar detecția unui nod care nu se află pe traseu este considerată o abatere, caz în care traseul este recalculat.
+\section{Săgeata din realitatea augmentată}
+Nivelul de realitate augmentată transformă sugestiile textuale precedente într-un suport vizual, sub forma unei săgeți pe ecran suprapusă pe transmisia directă a camerei. Orientarea dispozitivului mobil este obținută din browser (\texttt{DeviceOrientationEvent}), care îmi oferă busola și înclinația dispozitivului. Unghiul la care este desenată săgeata este diferența dintre ținta din graf și îndreptarea curentă a dispozitivului. Săgeata în sine este randată ca un set de chevroane care sugerează o cale proiectată pe podea.
+Deoarece un browser de calculator (folosit de-a lungul procesului de iterație) nu are busolă, implementarea estimează direcțiile și vizual, identificând punctele de fugă disponibile. Folosesc doi estimatori separați: unul bazat pe perspectiva liniilor din clădire și unul bazat pe efectul de paralaxă dintre cadre. Aceștia sunt combinați pentru a obține un punct țintă, care ghidează săgeata de navigare când busola nu este valabilă. În final, aceasta este combinată cu factorul de încredere al localizării: când acesta scade sub un anumit prag, interfața intră într-un mod de ``scanare'', pentru a încuraja o încercare de recalibrare din partea utilizatorului.
+\section{Suita de testare}
+Pentru a evalua și demonstra funcționalitatea sistemului fără a merge fizic în spațiul înregistrat, am implementat un mod de testare în cadrul căruia un video preînregistrat înlocuiește, ca sursă, capturile camerei. Pentru asta a fost nevoie să împart video-ul în segmente scurte, tăiate dintr-o înregistrare sursă 4K, proces care s-a dovedit anevoios, fiind format dintr-o serie de probleme de integrare.
+Prima implementare recodifica clipurile prin OpenCV folosind \texttt{VideoWriter} folosind codecul H.264 (\texttt{avc1}). Pe Windows acesta depinde de o bibliotecă dinamică externă de OpenH264 care trebuia să fie compatibilă cu cea folosită în cadrul utilitarului de FFMpeg. În practică aceasta ori lipsea ori era versiunea greșită, și codificarea eșua. Soluția a constat în renunțarea la codecul din sistem și în folosirea unui fișier binar FFMpeg autonom furnizat de pachetul \texttt{imageio-ffmpeg}, care a garantat și compatibilitatea cu formatul specific browserului.
+În continuare, aceasta a expus o nouă problemă: codificatorul H.264 respinge cadre ale căror lățime sau înălțime este impară, iar clipul redus rezultă ocazional în acest tip de rezoluții, rezultând în eșuarea codificării. Această problemă a fost rezolvată prin rotunjire. O altă problemă a fost performanța: decodificarea și recodificarea clipului cadru cu cadru în Python, într-un fișier de dimensiuni semnificative (~1GB), era foarte înceată și menținea interfața într-o stare de așteptare. Implementarea finală folosește FFmpeg într-un singur apel, folosind o căutare la intrare pentru a extrage doar fereastra solicitată, un filtru de scalare care menține lățimea pară și flagul \texttt{+faststart}, astfel încât browserul să poată începe redarea imediat. Figura~\ref{fig:clip} prezintă comanda rezultată.
+\begin{figure}[H]
+  \centering
+\begin{lstlisting}[language=Python]
+ff = imageio_ffmpeg.get_ffmpeg_exe()
+cmd = [ff, "-y",
+       "-ss", f"{start_sec:.3f}",        # fast seek: decode only the window
+       "-i", str(TEST_VIDEO),
+       "-t", str(CLIP_SECONDS),
+       "-vf", f"scale=-2:{CLIP_HEIGHT}",  # -2 keeps aspect, forces even width
+       "-an", "-c:v", "libx264", "-preset", "veryfast",
+       "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+       path]
+subprocess.run(cmd, capture_output=True, text=True)
+\end{lstlisting}
+  \caption{Extragerea clipurilor video prin intermediul FFmpeg (server.py).}
+  \label{fig:clip}
+\end{figure}
+\newpage
+\section{Indicații formatare tabele}
+Se recomandă utilizarea tabelelor de forma celui de mai jos.  Font size :  9.
+Orice tabel prezent în teză va fi referit în text; exemplu: a se vedea Tabel~\ref{tab:criterii}.
+\begin{table}[th]\small\linespread{1}
+\caption{Sumarizare criterii}
+\label{tab:criterii}
+\begin{tabular}{l >{\raggedright\arraybackslash}p{8cm} >{\raggedright\arraybackslash}p{4cm}}
+\textbf{Calificativ} & \textbf{Criteriu} & \textbf{Observații} \\\hline
+\textbf{Nesatisfacator} & Sunt prezentate pe scurt scheme și pseudo-cod & \\\hline
+\textbf{Satisfacator} &Descriere sumara a implementării, prezentarea unor secvențe nerelevante de cod, scheme, etc.& \\
+\hline
+\textbf{\textit{Bine}} &Descrierea detaliată a algoritmilor/structurilor utilizați; Prezentarea etapizată a dezvoltării, inclusiv cu dificultăți de implementare întâmpinate, soluții descoperite; (dacă este cazul) demonstrarea corectitudinii algoritmilor utilizați. & Pot fi incluse configurații, secvente de cod, pseudo-cod, implementări ale unor algoritmi, analize ale unor date, scripturi de testare. \\
+\hline
+\end{tabular}
+\end{table}
