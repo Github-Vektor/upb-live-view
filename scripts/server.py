@@ -9,6 +9,7 @@ Usage:
     python scripts/server.py --port 8787
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from pathlib import Path
 import cv2
 import imageio_ffmpeg
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, File, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -27,6 +28,7 @@ from _localise_core import load_index, make_matcher, make_extractor
 
 ROOT       = Path(__file__).parent.parent
 DB_PATH    = ROOT / "data" / "feature_index.db"
+GRAPH_PATH = ROOT / "data" / "graph.json"
 
 # Source for the on-demand test clip served to the Test view.
 TEST_VIDEO   = ROOT / "recordings" / "evening_high_light" / "test.mp4"
@@ -36,15 +38,29 @@ CLIP_HEIGHT  = 720
 app = FastAPI(title="Interior Live View — Localisation API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["POST", "GET"], allow_headers=["*"])
 
-_index     = []
-_meta      = {}
-_extractor = None
-_bf        = None
+_index      = []
+_meta       = {}
+_extractor  = None
+_bf         = None
+_neighbours = {}   # node_id -> set of node_id (the node itself + its graph neighbours)
+
+
+def _load_neighbours() -> dict:
+    """node_id -> {node_id} ∪ {directly connected node_ids}, from graph.json."""
+    if not GRAPH_PATH.exists():
+        return {}
+    g = json.loads(GRAPH_PATH.read_text())
+    nb = {n["id"]: {n["id"]} for n in g["nodes"]}
+    for e in g["edges"]:
+        nb.setdefault(e["from"], {e["from"]}).add(e["to"])
+        nb.setdefault(e["to"], {e["to"]}).add(e["from"])
+    return nb
 
 
 @app.on_event("startup")
 def startup():
-    global _index, _meta, _extractor, _bf
+    global _index, _meta, _extractor, _bf, _neighbours
+    _neighbours = _load_neighbours()
     if not DB_PATH.exists():
         print(f"WARNING: index not found at {DB_PATH}. Run build_index.py first.")
         return
@@ -55,9 +71,12 @@ def startup():
 
 
 @app.post("/localise")
-async def localise_endpoint(frame: UploadFile = File(...)):
+async def localise_endpoint(frame: UploadFile = File(...), node: str = Form(None)):
     from _localise_core import localise
-    return localise(await frame.read(), _index, _extractor, _bf)
+    # Restrict the search to the current node + its neighbours when the client
+    # tells us where it currently is; otherwise search the whole index.
+    allowed = _neighbours.get(node) if node else None
+    return localise(await frame.read(), _index, _extractor, _bf, allowed)
 
 
 N_SEGMENTS = 10  # the recording is divided into this many equal windows

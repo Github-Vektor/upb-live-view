@@ -101,6 +101,34 @@ export function useHallwayDirection(
     const edgeImg = edgeCtx.createImageData(W, H)
     const isRed = new Uint8Array(W * H)  // vertical-line pixels, for run-length weighting
 
+    // Manual nudge of the vanishing point via the i/j/k/l keys (o resets) — a
+    // demo aid. Offsets are in normalised image units and shift both the
+    // on-screen VP marker and the target the arrow aims at, so the presenter can
+    // correct the steering by hand when the automatic estimate is off.
+    //   i = up, k = down, j = left, l = right, o = reset. Reset on remount.
+    const NUDGE = 0.03
+    // Hardcoded baseline nudge tuned for the demo recordings: 3 clicks right
+    // (+x) and 3 clicks up (-y). 'o' resets back to this baseline.
+    const DEF_X = 3 * NUDGE
+    const DEF_Y = -3 * NUDGE
+    const manual = { x: DEF_X, y: DEF_Y }
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+      switch (e.key.toLowerCase()) {
+        case 'j': manual.x -= NUDGE; break  // left
+        case 'l': manual.x += NUDGE; break  // right
+        case 'i': manual.y -= NUDGE; break  // up
+        case 'k': manual.y += NUDGE; break  // down
+        case 'o': manual.x = DEF_X; manual.y = DEF_Y; break  // reset to baseline
+        default: return
+      }
+      manual.x = clamp(manual.x, -0.5, 0.5)
+      manual.y = clamp(manual.y, -0.5, 0.5)
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+
     const grab = (): Float32Array | null => {
       const video = videoRef.current
       if (!video || video.readyState < 2 || video.videoWidth === 0) return null
@@ -328,8 +356,8 @@ export function useHallwayDirection(
       } else {
         gridRef.current.valid = false
       }
-      gridRef.current.x = clamp(vpSmooth.current.x / W, 0, 1)
-      gridRef.current.y = clamp(vpSmooth.current.y / H, 0, 1)
+      gridRef.current.x = clamp(vpSmooth.current.x / W + manual.x, 0, 1)
+      gridRef.current.y = clamp(vpSmooth.current.y / H + manual.y, 0, 1)
 
       const nx = clamp((vpSmooth.current.x - W / 2) / (W / 2), -1.5, 1.5)
       const ny = clamp((H * BASE_Y - vpSmooth.current.y) / (H * BASE_Y), -1.2, 1.2)
@@ -375,8 +403,8 @@ export function useHallwayDirection(
 
       motionRef.current.yaw   = fusedRef.current.yaw
       motionRef.current.pitch = fusedRef.current.pitch
-      combinedVp.current.x = yawToX(fusedRef.current.yaw)
-      combinedVp.current.y = pitchToY(fusedRef.current.pitch)
+      combinedVp.current.x = clamp(yawToX(fusedRef.current.yaw) + manual.x, 0, 1)
+      combinedVp.current.y = clamp(pitchToY(fusedRef.current.pitch) + manual.y, 0, 1)
       combinedVp.current.valid = initRef.current
 
       drawDebug(cur)
@@ -385,6 +413,7 @@ export function useHallwayDirection(
     rafRef.current = requestAnimationFrame(tick)
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      window.removeEventListener('keydown', onKey)
       prevRef.current = null
     }
   }, [videoRef])

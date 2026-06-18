@@ -70,7 +70,8 @@ def match_count(query_descs: np.ndarray, ref_descs: np.ndarray, bf: cv2.BFMatche
     return sum(1 for pair in raw if len(pair) == 2 and pair[0].distance < LOWE_RATIO * pair[1].distance)
 
 
-def localise(jpeg_bytes: bytes, index: list, extractor, bf: cv2.BFMatcher) -> dict:
+def localise(jpeg_bytes: bytes, index: list, extractor, bf: cv2.BFMatcher,
+             allowed_nodes: set | None = None) -> dict:
     import time
     t0 = time.perf_counter()
 
@@ -84,9 +85,17 @@ def localise(jpeg_bytes: bytes, index: list, extractor, bf: cv2.BFMatcher) -> di
     if descs is None:
         return {"error": "No features detected"}
 
+    # Speed-up: when the caller knows the current node, only match against frames
+    # from that node and its graph neighbours (the rooms/connectors reachable in
+    # one step). This shrinks the search space dramatically. Fall back to the
+    # full index if the candidate set turns out empty.
+    search = index
+    if allowed_nodes:
+        search = [e for e in index if e[1] in allowed_nodes] or index
+
     scores = [
         (match_count(descs, ref, bf), frame_id, node_id)
-        for frame_id, node_id, ref in index
+        for frame_id, node_id, ref in search
     ]
     scores = [(g, fid, nid) for g, fid, nid in scores if g >= MIN_MATCHES]
 

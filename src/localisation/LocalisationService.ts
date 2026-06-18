@@ -16,9 +16,12 @@ export interface LocalisationResult {
   inference_ms: number
 }
 
-export async function queryFrame(jpeg: Blob): Promise<LocalisationResult> {
+export async function queryFrame(jpeg: Blob, nodeId?: string | null): Promise<LocalisationResult> {
   const form = new FormData()
   form.append('frame', jpeg, 'frame.jpg')
+  // Tell the server the current node so it can restrict matching to that node
+  // and its neighbours (big speed-up). Omitted → server searches the full index.
+  if (nodeId) form.append('node', nodeId)
   const res = await fetch(`${SERVER}/localise`, { method: 'POST', body: form })
   if (!res.ok) throw new Error(`Server error ${res.status}`)
   return res.json()

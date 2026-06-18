@@ -2,12 +2,12 @@ import type { RouteStep, StepAction } from '../navigation/types'
 import './NavigationBar.css'
 
 const ACTION_ICON: Record<StepAction, string> = {
-  start:        '▶',
+  start:        '↑',
   continue:     '↑',
   'turn-left':  '↰',
   'turn-right': '↱',
   'turn-around':'↩',
-  arrive:       '⚑',
+  arrive:       '●',
 }
 
 const ACTION_LABEL: Record<StepAction, string> = {
@@ -51,7 +51,7 @@ export default function NavigationBar({ step, stepIndex, totalSteps, onCancel, i
       <div className="nav-bar__controls">
         {/* Advancement is automatic (localisation-driven); only cancel/done is manual. */}
         <button className="nav-bar__btn nav-bar__btn--cancel" onClick={onCancel}>
-          {isLast ? 'Done' : '✕ Cancel'}
+          {isLast ? 'Done' : 'Cancel'}
         </button>
       </div>
     </div>

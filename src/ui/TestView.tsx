@@ -5,6 +5,7 @@ import { useHallwayDirection } from '../ar/useHallwayDirection'
 import { useDeviceOrientation } from '../ar/useDeviceOrientation'
 import { useLocalisation } from '../localisation/useLocalisation'
 import { testClipUrl } from '../localisation/LocalisationService'
+import { getNavigableNodes } from '../navigation/graph'
 import type { RouteStep } from '../navigation/types'
 import NavigationBar from './NavigationBar'
 import LocalisationBadge from './LocalisationBadge'
@@ -12,11 +13,16 @@ import VanishingPointMarker from './VanishingPointMarker'
 import './TestView.css'
 
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2]
+const ALL_DESTINATIONS = getNavigableNodes()
 
 interface Props {
   currentStep:  RouteStep | null
   stepIndex:    number
   totalSteps:   number
+  currentNodeId: string
+  destinationId: string | null
+  onNavigate:   (destId: string) => void
+  onStartFromEnd:() => void
   onCancelRoute:() => void
   onNodeDetected:(nodeId: string) => void
   onClose:      () => void
@@ -24,13 +30,14 @@ interface Props {
 
 export default function TestView({
   currentStep, stepIndex, totalSteps,
+  currentNodeId, destinationId, onNavigate, onStartFromEnd,
   onCancelRoute, onNodeDetected, onClose,
 }: Props) {
   const canvasRef   = useRef<HTMLCanvasElement | null>(null)
   const linesCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const [linesMode, setLinesMode] = useState(false)
   const video       = useVideoFile()
-  const localisation = useLocalisation(video.videoRef)
+  const localisation = useLocalisation(video.videoRef, currentNodeId)
   const orientation  = useDeviceOrientation()
   // Find the end of the hallway (grid vanishing point + wobble parallax) — no
   // compass on a laptop. grid/wobble/combined drive the on-screen debug markers.
@@ -86,11 +93,25 @@ export default function TestView({
         <button className="test-back-btn" onClick={onClose}>‹ Back</button>
         <span className="test-title">Test Recording</span>
         <div className="test-change-btns">
+          <select
+            className="test-open-btn"
+            style={{ maxWidth: 170 }}
+            title="Pick a destination (acts like the live view)"
+            value={destinationId ?? ''}
+            onChange={e => { if (e.target.value) onNavigate(e.target.value) }}
+          >
+            <option value="" disabled>Navigate to…</option>
+            {ALL_DESTINATIONS.map(n => (
+              <option key={n.id} value={n.id} disabled={n.id === currentNodeId}>
+                {n.label}{n.id === currentNodeId ? ' (current)' : ''}
+              </option>
+            ))}
+          </select>
           <button className="test-open-btn" onClick={() => setLinesMode(m => !m)}>
-            {linesMode ? '🎥 Video' : '📈 Lines'}
+            {linesMode ? 'Video' : 'Lines'}
           </button>
-          <button className="test-open-btn" onClick={loadNextClip}>🎬 Next clip</button>
-          <button className="test-open-btn" onClick={video.openFile}>Open file</button>
+          <button className="test-open-btn" onClick={loadNextClip}>Next clip</button>
+          <button className="test-open-btn" onClick={() => { onStartFromEnd(); video.openFile() }}>Open file</button>
         </div>
       </div>
 
@@ -125,17 +146,15 @@ export default function TestView({
 
         {video.error ? (
           <div className="test-empty">
-            <span className="test-empty-icon">⚠</span>
             <span>{video.error}</span>
             <button className="test-empty-btn" onClick={loadNextClip}>Retry</button>
           </div>
         ) : video.loading ? (
           <div className="test-empty">
-            <span className="test-empty-icon">▶</span>
             <span>Generating clip…</span>
           </div>
         ) : (
-          <LocalisationBadge localisation={localisation} />
+          <LocalisationBadge localisation={localisation} effectiveNodeId={currentNodeId} />
         )}
       </div>
 

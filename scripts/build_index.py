@@ -189,6 +189,81 @@ def index_recording(
 
 
 # ---------------------------------------------------------------------------
+# Walkthrough indexing — one video covering the whole path, with frames labelled
+# by the ground-truth crossing times instead of one short clip per node.
+# ---------------------------------------------------------------------------
+
+def gt_label_at(timestamp: float, path: list[str], crossings: list[float]) -> str:
+    """Ground-truth node for a timestamp: before the first crossing it is the
+    start node, after the last crossing the end node, otherwise the node whose
+    crossing interval contains the timestamp."""
+    if timestamp < crossings[0]:
+        return path[0]
+    for i in range(len(crossings) - 1):
+        if crossings[i] <= timestamp < crossings[i + 1]:
+            return path[i]
+    return path[-1]
+
+
+def index_walkthrough(
+    conn: sqlite3.Connection,
+    extractor,
+    video: str,
+    gt_path: Path,
+    frame_interval_sec: float,
+    augment: bool,
+) -> int:
+    path = RECORDINGS_DIR / video
+    if not path.exists():
+        print(f"  WARNING: walkthrough {path} not found — skipping.")
+        return 0
+    if not gt_path.exists():
+        print(f"  WARNING: ground-truth {gt_path} not found — skipping walkthrough.")
+        return 0
+
+    gt = json.loads(gt_path.read_text())
+    gt_nodes, crossings = gt["path"], gt["crossings_sec"]
+
+    cap   = cv2.VideoCapture(str(path))
+    fps   = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    step  = max(1, int(fps * frame_interval_sec))
+
+    rows      = []
+    frame_idx = 0
+    variants  = [("none", lambda g: g)] + (AUGMENTATIONS if augment else [])
+
+    with tqdm(total=total // step, desc=f"  {video}", unit="frame", leave=False) as pbar:
+        while True:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            t         = frame_idx / fps
+            node_id   = gt_label_at(t, gt_nodes, crossings)
+            base_gray = resize_gray(frame)
+
+            for aug_name, aug_fn in variants:
+                packed = extract_and_pack(extractor, aug_fn(base_gray))
+                if packed:
+                    kp_blob, desc_blob = packed
+                    rows.append((node_id, video, frame_idx, t, aug_name, kp_blob, desc_blob))
+
+            frame_idx += step
+            pbar.update(1)
+
+    cap.release()
+    conn.executemany(
+        "INSERT INTO frames (node_id, recording, frame_index, timestamp_sec, augmentation, keypoints, descriptors) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    return len(rows)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -202,6 +277,12 @@ def main():
     parser.add_argument("--clear",        action="store_true",       help="Delete existing index before building")
     parser.add_argument("--condition",    type=str,   default="evening_high_light",
                         help="Recordings subfolder / lighting condition (default: evening_high_light)")
+    parser.add_argument("--with-train",   action="store_true",
+                        help="Also index the full walkthrough (train.mp4) labelled by data/gt_train.json")
+    parser.add_argument("--train-video",  type=str,   default="train.mp4",
+                        help="Walkthrough filename in the condition folder (used with --with-train)")
+    parser.add_argument("--train-gt",     type=str,   default=str(ROOT / "data" / "gt_train.json"),
+                        help="Ground-truth crossings JSON for the walkthrough")
     args = parser.parse_args()
 
     global RECORDINGS_DIR
@@ -218,13 +299,28 @@ def main():
 
     total_frames = 0
     for node in graph["nodes"]:
-        recording = node.get("recording")
-        if not recording:
+        # Primary recording for the node, plus any extra corridor/transition
+        # clips listed under "paths" (the walks between rooms). All are indexed
+        # under this node's id. Missing files are skipped with a warning, so a
+        # condition folder that lacks the transition clips still builds fine.
+        recs = []
+        if node.get("recording"):
+            recs.append(node["recording"])
+        recs.extend(node.get("paths", []))
+        if not recs:
             continue
-        print(f"{node['id']}  ({recording})")
-        n = index_recording(conn, extractor, node["id"], recording, frame_interval_sec, args.augment)
-        aug_note = f"  ({n // (1 + len(AUGMENTATIONS))} raw × {1 + len(AUGMENTATIONS)} variants)" if args.augment else ""
-        print(f"  {n} frames indexed{aug_note}")
+        print(f"{node['id']}  ({len(recs)} recording(s))")
+        node_frames = 0
+        for rec in recs:
+            node_frames += index_recording(conn, extractor, node["id"], rec, frame_interval_sec, args.augment)
+        print(f"  {node_frames} frames indexed")
+        total_frames += node_frames
+
+    if args.with_train:
+        print(f"walkthrough  ({args.train_video}, labelled by {Path(args.train_gt).name})")
+        n = index_walkthrough(conn, extractor, args.train_video, Path(args.train_gt),
+                              frame_interval_sec, args.augment)
+        print(f"  {n} frames indexed")
         total_frames += n
 
     conn.executemany("INSERT OR REPLACE INTO metadata VALUES (?, ?)", [

@@ -18,3 +18,11 @@ export function getEdgesFrom(nodeId: string): GraphEdge[] {
 export function getNavigableNodes(): GraphNode[] {
   return graph.nodes.filter(n => n.type !== 'waypoint')
 }
+
+/** True if two nodes are the same or directly connected by an edge. */
+export function areAdjacent(a: string, b: string): boolean {
+  if (a === b) return true
+  return graph.edges.some(
+    e => (e.from === a && e.to === b) || (e.from === b && e.to === a),
+  )
+}

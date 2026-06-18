@@ -1,11 +1,11 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import CameraView from './ui/CameraView'
 import MenuView from './ui/MenuView'
 import TestView from './ui/TestView'
 import ToggleButton from './ui/ToggleButton'
 import ArrivalScreen from './ui/ArrivalScreen'
 import type { RouteStep } from './navigation/types'
-import { getNode } from './navigation/graph'
+import { getNode, areAdjacent } from './navigation/graph'
 import { computeRoute } from './navigation/routing'
 import './styles/app.css'
 
@@ -28,14 +28,21 @@ export default function App() {
   const stepIndexRef    = useRef(stepIndex)
   const navPhaseRef     = useRef(navPhase)
   const destinationRef  = useRef(destinationId)
+  const currentNodeRef  = useRef(currentNodeId)
   const mismatchRef     = useRef(0)
 
   routeRef.current       = route
   stepIndexRef.current   = stepIndex
   navPhaseRef.current    = navPhase
   destinationRef.current = destinationId
+  currentNodeRef.current = currentNodeId
 
   const handleNodeDetected = useCallback((nodeId: string) => {
+    // Topological gate: accept a detected node only if it is the current node or
+    // directly adjacent to it. On a corridor the user can only move to a
+    // neighbour, so non-adjacent detections are localisation noise and ignored.
+    if (!areAdjacent(currentNodeRef.current, nodeId)) return
+
     setCurrentNodeId(nodeId)
 
     const r   = routeRef.current
@@ -77,14 +84,15 @@ export default function App() {
     }
   }, [])
 
-  function handleNavigate(destId: string, targetView: AppView = 'camera') {
-    const steps = computeRoute(currentNodeId, destId)
+  function handleNavigate(destId: string, targetView: AppView = 'camera', startId: string = currentNodeId) {
+    const steps = computeRoute(startId, destId)
     if (!steps || steps.length === 0) return
     setRoute(steps)
     setStepIndex(0)
     setDestinationId(destId)
     setNavPhase('navigating')
     mismatchRef.current = 0
+    setCurrentNodeId(startId)
     setView(targetView)
   }
 
@@ -100,6 +108,20 @@ export default function App() {
     handleCancelRoute()
     setView('menu')
   }
+
+  // Demo aid: press "f" to force the "you have arrived" screen.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+      if (e.key === 'f' || e.key === 'F') {
+        if (!destinationRef.current) setDestinationId(currentNodeRef.current)
+        setNavPhase('arrived')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const currentStep = navPhase === 'navigating' && route.length > 0 ? route[stepIndex] : null
 
@@ -123,6 +145,10 @@ export default function App() {
           currentStep={currentStep}
           stepIndex={stepIndex}
           totalSteps={route.length}
+          currentNodeId={currentNodeId}
+          destinationId={destinationId}
+          onNavigate={(destId) => handleNavigate(destId, 'test')}
+          onStartFromEnd={() => handleNavigate(destinationId ?? 'conn_0_1', 'test', 'conn_4_5')}
           onCancelRoute={handleCancelRoute}
           onNodeDetected={handleNodeDetected}
           onClose={() => setView('menu')}
@@ -135,14 +161,9 @@ export default function App() {
           onNavigate={handleNavigate}
           onCancelRoute={handleCancelRoute}
           onOpenTest={() => {
-            // Ensure the Test view always has a route so the guiding arrow shows.
-            // If nothing is active, start a demo route to the far end of the corridor.
-            if (navPhaseRef.current !== 'navigating') {
-              const demoDest = currentNodeId === 'conn_0_1' ? 'conn_4_5' : 'conn_0_1'
-              handleNavigate(demoDest, 'test')
-            } else {
-              setView('test')
-            }
+            // Test mode always starts at the end of the corridor (hall5 = conn_4_5)
+            // and routes to the far end, so the guiding arrow shows immediately.
+            handleNavigate('conn_0_1', 'test', 'conn_4_5')
           }}
         />
       )}

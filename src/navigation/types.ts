@@ -6,6 +6,9 @@ export interface GraphNode {
   type: NodeType
   /** Filename relative to recordings/ directory */
   recording: string
+  /** Optional extra recordings (e.g. corridor/transition clips between rooms)
+   *  also indexed under this node. Skipped silently if a file is absent. */
+  paths?: string[]
 }
 
 export interface GraphEdge {

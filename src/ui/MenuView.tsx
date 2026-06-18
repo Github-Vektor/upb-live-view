@@ -59,7 +59,6 @@ export default function MenuView({ currentNodeId, destinationId, route, onNaviga
                 className={`menu-dest-btn${destinationId === node.id ? ' menu-dest-btn--active' : ''}`}
                 onClick={() => onNavigate(node.id)}
               >
-                <span className="menu-dest-icon">{nodeIcon(node.type)}</span>
                 <span className="menu-dest-label">{node.label}</span>
               </button>
             </li>
@@ -80,19 +79,9 @@ export default function MenuView({ currentNodeId, destinationId, route, onNaviga
       <section className="menu-section">
         <h2>Developer</h2>
         <button className="menu-test-btn" onClick={onOpenTest}>
-          <span className="menu-dest-icon">▶</span>
           <span className="menu-dest-label">Test with recording</span>
         </button>
       </section>
     </div>
   )
-}
-
-function nodeIcon(type: string): string {
-  switch (type) {
-    case 'entrance': return '🚪'
-    case 'exit':     return '🚶'
-    case 'room':     return '🏫'
-    default:         return '📍'
-  }
 }
