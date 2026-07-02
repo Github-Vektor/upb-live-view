@@ -1,11 +1,20 @@
-export type NodeType = 'entrance' | 'exit' | 'waypoint' | 'room'
+export type NodeType =
+  | 'entrance'
+  | 'exit'
+  | 'waypoint'
+  | 'room'
+  | 'hallway'
+  | 'intersection'
+  | 'stairwell'
 
 export interface GraphNode {
   id: string
   label: string
   type: NodeType
-  /** Filename relative to recordings/ directory */
-  recording: string
+  /** Filename relative to recordings/ directory. Optional — some nodes (e.g. a
+   *  hallway/intersection stretch, or a stairwell with no dedicated pan) only
+   *  have reference imagery via `paths`, not a standalone circular-pan clip. */
+  recording?: string
   /** Optional extra recordings (e.g. corridor/transition clips between rooms)
    *  also indexed under this node. Skipped silently if a file is absent. */
   paths?: string[]

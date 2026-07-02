@@ -1,0 +1,29 @@
+.theme-toggle-btn {
+  position: fixed;
+  bottom: 2rem;
+  left: 1.5rem;
+  z-index: 100;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-translucent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  transition: background 0.15s;
+}
+
+.theme-toggle-btn:active {
+  background: var(--surface-translucent-strong);
+}
+
+.theme-toggle-btn svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}

@@ -26,10 +26,15 @@ interface Props {
   onCancel: () => void
   /** Render in normal flow (not absolutely positioned over the content). */
   inline?: boolean
+  /** When set, a presenter has manually overwritten the recommendation (w/a/s/d) —
+   *  show this action instead of step.action. Deliberately indistinguishable
+   *  on screen from a calculated recommendation. */
+  overrideAction?: StepAction | null
 }
 
-export default function NavigationBar({ step, stepIndex, totalSteps, onCancel, inline }: Props) {
+export default function NavigationBar({ step, stepIndex, totalSteps, onCancel, inline, overrideAction }: Props) {
   const isLast = stepIndex === totalSteps - 1
+  const action = overrideAction ?? step.action
 
   return (
     <div className={`nav-bar${inline ? ' nav-bar--inline' : ''}`}>
@@ -38,12 +43,12 @@ export default function NavigationBar({ step, stepIndex, totalSteps, onCancel, i
       </div>
 
       <div className="nav-bar__instruction">
-        <span className="nav-bar__icon">{ACTION_ICON[step.action]}</span>
+        <span className="nav-bar__icon">{ACTION_ICON[action]}</span>
         <div className="nav-bar__text">
-          <span className="nav-bar__verb">{ACTION_LABEL[step.action]}</span>
+          <span className="nav-bar__verb">{ACTION_LABEL[action]}</span>
           <span className="nav-bar__dest">{step.toNodeLabel}</span>
         </div>
-        {step.action !== 'arrive' && (
+        {action !== 'arrive' && (
           <span className="nav-bar__dist">{step.distanceMeters} m</span>
         )}
       </div>

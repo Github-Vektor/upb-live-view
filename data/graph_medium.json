@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    { "id": "conn_0_1", "label": "Connector 0–1", "type": "waypoint", "recording": "h1.mp4" },
+    { "id": "tower_1",  "label": "Tower 1",       "type": "room",     "recording": "d1.mp4" },
+    { "id": "conn_1_2", "label": "Connector 1–2", "type": "waypoint", "recording": "h2.mp4" },
+    { "id": "tower_2",  "label": "Tower 2",       "type": "room",     "recording": "d2.mp4" },
+    { "id": "conn_2_3", "label": "Connector 2–3", "type": "waypoint", "recording": "h3.mp4" },
+    { "id": "tower_3",  "label": "Tower 3",       "type": "room",     "recording": "d3.mp4" },
+    { "id": "conn_3_4", "label": "Connector 3–4", "type": "waypoint", "recording": "h4.mp4" },
+    { "id": "tower_4",  "label": "Tower 4",       "type": "room",     "recording": "d4.mp4" },
+    { "id": "conn_4_5", "label": "Connector 4–5", "type": "waypoint", "recording": "h5.mp4" }
+  ],
+  "edges": [
+    { "from": "conn_0_1", "to": "tower_1",  "weight": 15, "heading": 0   },
+    { "from": "tower_1",  "to": "conn_0_1", "weight": 15, "heading": 180 },
+    { "from": "tower_1",  "to": "conn_1_2", "weight": 15, "heading": 0   },
+    { "from": "conn_1_2", "to": "tower_1",  "weight": 15, "heading": 180 },
+    { "from": "conn_1_2", "to": "tower_2",  "weight": 15, "heading": 0   },
+    { "from": "tower_2",  "to": "conn_1_2", "weight": 15, "heading": 180 },
+    { "from": "tower_2",  "to": "conn_2_3", "weight": 15, "heading": 0   },
+    { "from": "conn_2_3", "to": "tower_2",  "weight": 15, "heading": 180 },
+    { "from": "conn_2_3", "to": "tower_3",  "weight": 15, "heading": 0   },
+    { "from": "tower_3",  "to": "conn_2_3", "weight": 15, "heading": 180 },
+    { "from": "tower_3",  "to": "conn_3_4", "weight": 15, "heading": 0   },
+    { "from": "conn_3_4", "to": "tower_3",  "weight": 15, "heading": 180 },
+    { "from": "conn_3_4", "to": "tower_4",  "weight": 15, "heading": 0   },
+    { "from": "tower_4",  "to": "conn_3_4", "weight": 15, "heading": 180 },
+    { "from": "tower_4",  "to": "conn_4_5", "weight": 15, "heading": 0   },
+    { "from": "conn_4_5", "to": "tower_4",  "weight": 15, "heading": 180 }
+  ]
+}

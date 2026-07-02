@@ -10,7 +10,10 @@ export interface VideoFileState {
   duration:    number
   speed:       number
   loadUrl:     (url: string) => void
-  openFile:    () => void
+  /** Opens the OS file picker. `onPicked` (if given) receives the chosen File
+   *  before the video source swaps in — lets the caller recognise the file
+   *  by name (e.g. one of the hardcoded thesis-demo clips). */
+  openFile:    (onPicked?: (file: File) => void) => void
   togglePlay:  () => void
   seek:        (t: number) => void
   setSpeed:    (s: number) => void
@@ -95,7 +98,7 @@ export function useVideoFile(): VideoFileState {
     setSource(url, false)
   }, [setSource])
 
-  const openFile = useCallback(() => {
+  const openFile = useCallback((onPicked?: (file: File) => void) => {
     const input = document.createElement('input')
     input.type   = 'file'
     input.accept = 'video/*'
@@ -105,6 +108,9 @@ export function useVideoFile(): VideoFileState {
       const file = input.files?.[0]
       document.body.removeChild(input)
       if (!file) return
+      // Let the caller inspect the picked file (e.g. to recognise one of the
+      // hardcoded thesis-demo clips by name) before the source swaps in.
+      onPicked?.(file)
       setSource(URL.createObjectURL(file), true)
     }
     input.click()

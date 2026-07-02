@@ -6,10 +6,13 @@ at a configurable rate, computes descriptors, and stores everything in
 data/feature_index.db (SQLite).
 
 Usage:
-    python scripts/build_index.py                        # ORB, 1 fps, no augmentation
+    python scripts/build_index.py                        # evening_demo_light, ORB, 1 fps
     python scripts/build_index.py --feature-type sift    # SIFT (better viewpoint invariance)
     python scripts/build_index.py --augment              # add perspective + brightness variants
-    python scripts/build_index.py --fps 2 --clear        # denser sampling, fresh index
+    python scripts/build_index.py --fps 3 --min-frames-per-clip 8 --clear
+        # denser sampling for the short evening_demo_light clips, fresh index
+    python scripts/build_index.py --condition evening_medium_light --graph data/graph_medium.json --db data/index_med_orb.db
+        # build an older dataset instead of the current default
 """
 
 from __future__ import annotations
@@ -144,6 +147,7 @@ def index_recording(
     recording: str,
     frame_interval_sec: float,
     augment: bool,
+    min_frames_per_clip: int = 1,
 ) -> int:
     path = RECORDINGS_DIR / recording
     if not path.exists():
@@ -155,16 +159,52 @@ def index_recording(
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     step  = max(1, int(fps * frame_interval_sec))
 
+    # Safety net for very short clips (e.g. a 3-5s stairwell approach at 1 fps
+    # would only yield 3-5 frames): if the requested sampling rate wouldn't hit
+    # at least `min_frames_per_clip` frames, densify the sampling for this clip
+    # alone, capped at reading every native frame.
+    if min_frames_per_clip > 1 and total > 0 and total // step < min_frames_per_clip:
+        step = max(1, total // min_frames_per_clip)
+
+    # Resume support: skip frame indices already stored for this recording so a
+    # build interrupted by a time limit can be re-run and pick up where it left off.
+    existing = {fi for (fi,) in conn.execute(
+        "SELECT frame_index FROM frames WHERE node_id=? AND recording=?", (node_id, recording))}
+
+    insert_sql = ("INSERT INTO frames (node_id, recording, frame_index, timestamp_sec, augmentation, keypoints, descriptors) "
+                  "VALUES (?, ?, ?, ?, ?, ?, ?)")
     rows      = []
+    written   = 0
     frame_idx = 0
     variants  = [("none", lambda g: g)] + (AUGMENTATIONS if augment else [])
 
+    # Some phone recordings (variable-frame-rate H.264, or clips trimmed by a
+    # tool that stream-copies without rewriting the container's frame-count
+    # metadata) report a CAP_PROP_FRAME_COUNT far larger than what's actually
+    # decodable — and on some OpenCV/FFmpeg builds, seeking past the real end
+    # doesn't fail (ret stays True) but just re-returns the last frame forever.
+    # Without a guard, that turns a 5-second clip into a multi-minute hang
+    # re-extracting features from the same frozen frame thousands of times.
+    # Detect "no timestamp progress" and treat it as end-of-video.
+    last_pos_msec = -1.0
+
     with tqdm(total=total // step, desc=f"  {recording}", unit="frame", leave=False) as pbar:
         while True:
+            if frame_idx in existing:
+                frame_idx += step
+                pbar.update(1)
+                continue
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             if not ret:
                 break
+
+            pos_msec = cap.get(cv2.CAP_PROP_POS_MSEC)
+            if pos_msec > 0 and last_pos_msec >= 0 and pos_msec <= last_pos_msec + 1e-6:
+                # Stalled on the same timestamp — we've run past the real content.
+                break
+            if pos_msec > 0:
+                last_pos_msec = pos_msec
 
             base_gray = resize_gray(frame)
 
@@ -174,18 +214,23 @@ def index_recording(
                     kp_blob, desc_blob = packed
                     rows.append((node_id, recording, frame_idx, frame_idx / fps, aug_name, kp_blob, desc_blob))
 
+            # Commit incrementally so progress survives an interrupted run.
+            if len(rows) >= 8:
+                conn.executemany(insert_sql, rows)
+                conn.commit()
+                written += len(rows)
+                rows = []
+
             frame_idx += step
             pbar.update(1)
 
     cap.release()
 
-    conn.executemany(
-        "INSERT INTO frames (node_id, recording, frame_index, timestamp_sec, augmentation, keypoints, descriptors) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        rows,
-    )
-    conn.commit()
-    return len(rows)
+    if rows:
+        conn.executemany(insert_sql, rows)
+        conn.commit()
+        written += len(rows)
+    return written
 
 
 # ---------------------------------------------------------------------------
@@ -268,25 +313,48 @@ def index_walkthrough(
 # ---------------------------------------------------------------------------
 
 def main():
+    global DB_PATH, RECORDINGS_DIR
+
     parser = argparse.ArgumentParser(description="Build feature index from recordings.")
     parser.add_argument("--fps",          type=float, default=1.0,   help="Frames per second to extract (default: 1.0)")
+    parser.add_argument("--min-frames-per-clip", type=int, default=1,
+                        help="Densify sampling for any single clip shorter than this many "
+                             "frames at the chosen --fps (default: 1, i.e. off). Useful for "
+                             "conditions with very short clips (e.g. a few seconds each) where "
+                             "a low --fps would otherwise index only 1-2 frames from some clips.")
     parser.add_argument("--features",     type=int,   default=500,   help="Features per frame (default: 500)")
     parser.add_argument("--feature-type", type=str,   default="orb", choices=["orb", "sift"],
                         help="Feature extractor: orb (default) or sift")
     parser.add_argument("--augment",      action="store_true",       help="Add perspective + brightness augmentations")
     parser.add_argument("--clear",        action="store_true",       help="Delete existing index before building")
-    parser.add_argument("--condition",    type=str,   default="evening_high_light",
-                        help="Recordings subfolder / lighting condition (default: evening_high_light)")
+    parser.add_argument("--condition",    type=str,   default="evening_demo_light",
+                        help="Recordings subfolder / lighting condition (default: evening_demo_light, "
+                             "matching the node ids/filenames in the default data/graph.json). Pass "
+                             "evening_high_light or evening_medium_light with their matching --graph "
+                             "file (data/graph_high_light.json / data/graph_medium.json) to build an "
+                             "index for one of the older datasets instead.")
+    parser.add_argument("--recordings",   type=str,   default=str(RECORDINGS),
+                        help="Recordings root (default: repo recordings/). Point at a local "
+                             "copy for much faster frame seeking than a network/FUSE mount.")
+    parser.add_argument("--only",         type=str,   default=None,
+                        help="Comma-separated node ids to index (default: all). Lets a build "
+                             "be split across runs; commits happen per recording so progress persists.")
+    parser.add_argument("--graph",        type=str,   default=str(GRAPH_PATH),
+                        help="Graph JSON describing nodes and their recordings (default: data/graph.json). "
+                             "Use a condition-specific graph when filenames differ (e.g. h1.mp4 vs hall1.mp4).")
     parser.add_argument("--with-train",   action="store_true",
                         help="Also index the full walkthrough (train.mp4) labelled by data/gt_train.json")
     parser.add_argument("--train-video",  type=str,   default="train.mp4",
                         help="Walkthrough filename in the condition folder (used with --with-train)")
     parser.add_argument("--train-gt",     type=str,   default=str(ROOT / "data" / "gt_train.json"),
                         help="Ground-truth crossings JSON for the walkthrough")
+    parser.add_argument("--db",           type=str,   default=str(DB_PATH),
+                        help="Output index path (default: data/feature_index.db). "
+                             "Use distinct paths to keep ORB and SIFT indexes side by side.")
     args = parser.parse_args()
 
-    global RECORDINGS_DIR
-    RECORDINGS_DIR = RECORDINGS / args.condition
+    DB_PATH = Path(args.db)
+    RECORDINGS_DIR = Path(args.recordings) / args.condition
     if not RECORDINGS_DIR.is_dir():
         parser.error(f"recordings condition folder not found: {RECORDINGS_DIR}")
     print(f"Recordings: {RECORDINGS_DIR}")
@@ -294,11 +362,32 @@ def main():
     frame_interval_sec = 1.0 / args.fps
     extractor = make_extractor(args.feature_type, args.features)
 
-    graph = json.loads(GRAPH_PATH.read_text())
+    graph = json.loads(Path(args.graph).read_text())
     conn  = open_db(DB_PATH, args.clear)
+
+    import time
+    t_build0 = time.perf_counter()
+
+    # Write the constant metadata immediately so an interrupted/incremental build
+    # still produces a loadable index (load_index needs feature_type + desc_dtype).
+    conn.executemany("INSERT OR REPLACE INTO metadata VALUES (?, ?)", [
+        ("feature_type",       args.feature_type.upper()),
+        ("features_per_frame", str(args.features)),
+        ("frame_interval_sec", str(frame_interval_sec)),
+        ("query_height_px",    str(QUERY_HEIGHT)),
+        ("augmented",          str(args.augment)),
+        ("desc_dtype",         desc_dtype(args.feature_type)),
+        ("condition",          args.condition),
+        ("min_frames_per_clip", str(args.min_frames_per_clip)),
+    ])
+    conn.commit()
+
+    only = {n.strip() for n in args.only.split(",")} if args.only else None
 
     total_frames = 0
     for node in graph["nodes"]:
+        if only and node["id"] not in only:
+            continue
         # Primary recording for the node, plus any extra corridor/transition
         # clips listed under "paths" (the walks between rooms). All are indexed
         # under this node's id. Missing files are skipped with a warning, so a
@@ -312,7 +401,8 @@ def main():
         print(f"{node['id']}  ({len(recs)} recording(s))")
         node_frames = 0
         for rec in recs:
-            node_frames += index_recording(conn, extractor, node["id"], rec, frame_interval_sec, args.augment)
+            node_frames += index_recording(conn, extractor, node["id"], rec, frame_interval_sec,
+                                             args.augment, args.min_frames_per_clip)
         print(f"  {node_frames} frames indexed")
         total_frames += node_frames
 
@@ -323,20 +413,24 @@ def main():
         print(f"  {n} frames indexed")
         total_frames += n
 
+    build_seconds = time.perf_counter() - t_build0
+
+    # total_frames reflects the whole index (cumulative across incremental runs).
+    db_frames = conn.execute("SELECT COUNT(*) FROM frames").fetchone()[0]
+    prev_secs = conn.execute("SELECT value FROM metadata WHERE key='build_seconds'").fetchone()
+    cum_secs  = (float(prev_secs[0]) if prev_secs else 0.0) + build_seconds
     conn.executemany("INSERT OR REPLACE INTO metadata VALUES (?, ?)", [
-        ("feature_type",       args.feature_type.upper()),
-        ("features_per_frame", str(args.features)),
-        ("frame_interval_sec", str(frame_interval_sec)),
-        ("query_height_px",    str(QUERY_HEIGHT)),
-        ("total_frames",       str(total_frames)),
-        ("augmented",          str(args.augment)),
-        ("desc_dtype",         desc_dtype(args.feature_type)),
+        ("total_frames",  str(db_frames)),
+        ("build_seconds", f"{cum_secs:.2f}"),
     ])
     conn.commit()
     conn.close()
+    total_frames = db_frames
 
+    size_kb = DB_PATH.stat().st_size // 1024
     print(f"\nDone. {total_frames} frames → {DB_PATH}")
-    print(f"Index size: {DB_PATH.stat().st_size // 1024} KB")
+    print(f"Index size: {size_kb} KB ({size_kb/1024:.1f} MB)")
+    print(f"Build time: {build_seconds:.1f} s")
 
 
 if __name__ == "__main__":

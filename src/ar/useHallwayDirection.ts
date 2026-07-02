@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { DirectionNudge } from '../navigation/directionNudge'
 
 /**
  * Estimates the direction to the end of the hallway from the video frames, by
@@ -47,7 +48,7 @@ const VP_PITCH_G = VFOV_DEG / 2
 
 // Wobble odometry (parallax), seeded at the grid VP
 const SEARCH       = 4
-const GRID_CORRECT = 0.05   // low → the fused estimate leans on the wobble (parallax)
+const GRID_CORRECT = 0.25   // higher → fused estimate snaps toward the grid VP more aggressively, correcting wobble drift faster
 
 const MAX_YAW    = 40
 const MAX_PITCH  = 22
@@ -68,13 +69,19 @@ export function useHallwayDirection(
   /** Optional debug canvas — when mounted, the edges + vanishing point used for
    *  the fit are drawn to it ("lines only" view). */
   debugCanvasRef?: React.RefObject<HTMLCanvasElement | null>,
+  /** Manual i/j/k/l/o nudge (see useDirectionNudge) — shared with the arrow
+   *  overlay so the same nudge also applies when a w/a/s/d override is
+   *  driving the arrow instead of this hook's tracking. */
+  nudgeRef?: React.RefObject<DirectionNudge>,
 ): {
   motion: React.RefObject<Motion>
+  wobbleMotion: React.RefObject<Motion>
   grid: React.RefObject<VP>
   wobble: React.RefObject<VP>
   combined: React.RefObject<VP>
 } {
-  const motionRef   = useRef<Motion>({ yaw: 0, pitch: 0 })
+  const motionRef       = useRef<Motion>({ yaw: 0, pitch: 0 })
+  const wobbleMotionRef = useRef<Motion>({ yaw: 0, pitch: 0 })
   const gridRef     = useRef<VP>({ x: 0.5, y: BASE_Y, valid: false })
   const wobbleVp    = useRef<VP>({ x: 0.5, y: BASE_Y, valid: false })
   const combinedVp  = useRef<VP>({ x: 0.5, y: BASE_Y, valid: false })
@@ -101,33 +108,16 @@ export function useHallwayDirection(
     const edgeImg = edgeCtx.createImageData(W, H)
     const isRed = new Uint8Array(W * H)  // vertical-line pixels, for run-length weighting
 
-    // Manual nudge of the vanishing point via the i/j/k/l keys (o resets) — a
-    // demo aid. Offsets are in normalised image units and shift both the
-    // on-screen VP marker and the target the arrow aims at, so the presenter can
-    // correct the steering by hand when the automatic estimate is off.
-    //   i = up, k = down, j = left, l = right, o = reset. Reset on remount.
-    const NUDGE = 0.03
-    // Hardcoded baseline nudge tuned for the demo recordings: 3 clicks right
-    // (+x) and 3 clicks up (-y). 'o' resets back to this baseline.
-    const DEF_X = 3 * NUDGE
-    const DEF_Y = -3 * NUDGE
-    const manual = { x: DEF_X, y: DEF_Y }
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName
-      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
-      switch (e.key.toLowerCase()) {
-        case 'j': manual.x -= NUDGE; break  // left
-        case 'l': manual.x += NUDGE; break  // right
-        case 'i': manual.y -= NUDGE; break  // up
-        case 'k': manual.y += NUDGE; break  // down
-        case 'o': manual.x = DEF_X; manual.y = DEF_Y; break  // reset to baseline
-        default: return
+    // Manual nudge (i/j/k/l/o), owned by useDirectionNudge and shared with the
+    // arrow overlay — read here each tick and converted from the shared
+    // degrees unit into this hook's normalised image-space units.
+    const readManual = () => {
+      const n = nudgeRef?.current
+      return {
+        x: n ? n.yawDeg / (2 * VP_GAIN) : 0,
+        y: n ? n.pitchOffset : 0,
       }
-      manual.x = clamp(manual.x, -0.5, 0.5)
-      manual.y = clamp(manual.y, -0.5, 0.5)
-      e.preventDefault()
     }
-    window.addEventListener('keydown', onKey)
 
     const grab = (): Float32Array | null => {
       const video = videoRef.current
@@ -339,6 +329,8 @@ export function useHallwayDirection(
         return
       }
 
+      const manual = readManual()
+
       // --- (1) vanishing point from the grid ---
       const vp = estimateVP(cur)
       if (vp) {
@@ -401,6 +393,9 @@ export function useHallwayDirection(
       wobbleVp.current.y = pitchToY(wobbleRef.current.pitch)
       wobbleVp.current.valid = initRef.current
 
+      wobbleMotionRef.current.yaw   = wobbleRef.current.yaw
+      wobbleMotionRef.current.pitch = wobbleRef.current.pitch
+
       motionRef.current.yaw   = fusedRef.current.yaw
       motionRef.current.pitch = fusedRef.current.pitch
       combinedVp.current.x = clamp(yawToX(fusedRef.current.yaw) + manual.x, 0, 1)
@@ -413,10 +408,15 @@ export function useHallwayDirection(
     rafRef.current = requestAnimationFrame(tick)
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-      window.removeEventListener('keydown', onKey)
       prevRef.current = null
     }
-  }, [videoRef])
+  }, [videoRef, nudgeRef])
 
-  return { motion: motionRef, grid: gridRef, wobble: wobbleVp, combined: combinedVp }
+  return {
+    motion: motionRef,
+    wobbleMotion: wobbleMotionRef,
+    grid: gridRef,
+    wobble: wobbleVp,
+    combined: combinedVp,
+  }
 }

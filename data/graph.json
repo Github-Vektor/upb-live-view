@@ -1,38 +1,71 @@
 {
   "nodes": [
-    { "id": "conn_0_1", "label": "Connector 0–1", "type": "waypoint", "recording": "hall1.mp4", "paths": ["start_to_d1.mp4", "d1_to_h1.mp4", "h1_to_start.mp4", "h1_to_d2.mp4"] },
-    { "id": "tower_1",  "label": "Tower 1",       "type": "room",     "recording": "door1.mp4" },
-    { "id": "conn_1_2", "label": "Connector 1–2", "type": "waypoint", "recording": "hall2.mp4", "paths": ["d1_to_h2.mp4", "d2_to_h2.mp4", "h2_to_d1.mp4", "h2_to_d3.mp4"] },
-    { "id": "tower_2",  "label": "Tower 2",       "type": "room",     "recording": "door2.mp4" },
-    { "id": "conn_2_3", "label": "Connector 2–3", "type": "waypoint", "recording": "hall3.mp4", "paths": ["d2_to_h3.mp4", "d3_to_h3.mp4", "h3_to_d2.mp4", "h3_to_d4.mp4"] },
-    { "id": "tower_3",  "label": "Tower 3",       "type": "room",     "recording": "door3.mp4" },
-    { "id": "conn_3_4", "label": "Connector 3–4", "type": "waypoint", "recording": "hall4.mp4", "paths": ["d3_to_h4.mp4", "d4_to_h4.mp4", "h4_to_d3.mp4"] },
-    { "id": "tower_4",  "label": "Tower 4",       "type": "room",     "recording": "door4.mp4" },
-    { "id": "conn_4_5", "label": "Connector 4–5", "type": "waypoint", "recording": "hall5.mp4", "paths": ["d4_to_h5.mp4", "h5_to_d4.mp4", "h5_to_end.mp4", "end_to_h5.mp4"] }
+    { "id": "entrance", "label": "Entrance",    "type": "entrance",     "paths": ["ent_to_h1.mp4", "ent_to_exit.mp4"] },
+
+    { "id": "h1", "label": "eg201",     "type": "hallway",      "paths": ["ent_to_h1.mp4", "h1_to_i1.mp4", "i1_to_h1.mp4"] },
+    { "id": "i1", "label": "Cisco",     "type": "intersection", "paths": ["h1_to_i1.mp4", "i1_to_h1.mp4", "i1_to_h2.mp4", "h2_to_i1.mp4", "s1_to_i1.mp4", "s1_to_i1_1.mp4", "s1_to_i1_2.mp4", "s1_to_i1_2(1).mp4", "s1_to_i1_3.mp4"] },
+
+    { "id": "h2", "label": "Gameloft",  "type": "hallway",      "paths": ["i1_to_h2.mp4", "h2_to_i1.mp4", "h2_to_i2.mp4", "i2_to_h2.mp4"] },
+    { "id": "i2", "label": "Eg305",     "type": "intersection", "paths": ["h2_to_i2.mp4", "i2_to_h2.mp4", "i2_to_h3.mp4", "h3_to_i2.mp4", "s2_to_i2.mp4", "s2_to_i2_1.mp4", "s2_to_i2_2.mp4", "s2_to_i2_3.mp4", "s2_to_i2_3(1).mp4"] },
+
+    { "id": "h3", "label": "UIPath",    "type": "hallway",      "paths": ["i2_to_h3.mp4", "h3_to_i2.mp4", "h3_to_i3.mp4", "i3_to_h3.mp4"] },
+    { "id": "i3", "label": "Canti CTI", "type": "intersection", "paths": ["h3_to_i3.mp4", "i3_to_h3.mp4", "i3_to_h4.mp4", "h4_to_i3.mp4", "s3_to_i3.mp4", "s3_to_i3_1.mp4", "s3_to_i3_2.mp4"] },
+
+    { "id": "h4", "label": "Renewacad", "type": "hallway",      "paths": ["i3_to_h4.mp4", "h4_to_i3.mp4", "h3_to_i4.mp4", "i4_to_h3.mp4"] },
+    { "id": "i4", "label": "Honeywell", "type": "intersection", "paths": ["h3_to_i4.mp4", "i4_to_h3.mp4", "i4_to_h5.mp4", "h5_to_i4.mp4", "s4_to_i4.mp4", "s4_to_i4_1.mp4", "s4_to_i4_2.mp4"] },
+
+    { "id": "h5", "label": "eg216",     "type": "hallway",      "paths": ["i4_to_h5.mp4", "h5_to_i4.mp4", "h5_to_exit.mp4", "exit_to_h5.mp4"] },
+    { "id": "exit", "label": "Exit", "type": "exit", "recording": "exit.mp4", "paths": ["h5_to_exit.mp4", "exit_to_h5.mp4", "ent_to_exit.mp4", "exit_to_ent.mp4"] },
+
+    { "id": "s1", "label": "Stairwell 1", "type": "stairwell", "paths": ["s1_to_i1.mp4", "s1_to_i1_1.mp4", "s1_to_i1_2.mp4", "s1_to_i1_2(1).mp4", "s1_to_i1_3.mp4"] },
+    { "id": "s2", "label": "Stairwell 2", "type": "stairwell", "recording": "s2.mp4", "paths": ["s2_to_i2.mp4", "s2_to_i2_1.mp4", "s2_to_i2_2.mp4", "s2_to_i2_3.mp4", "s2_to_i2_3(1).mp4"] },
+    { "id": "s3", "label": "Stairwell 3", "type": "stairwell", "recording": "s3.mp4", "paths": ["s3_to_i3.mp4", "s3_to_i3_1.mp4", "s3_to_i3_2.mp4"] },
+    { "id": "s4", "label": "Stairwell 4", "type": "stairwell", "recording": "s4.mp4", "paths": ["s4_to_i4.mp4", "s4_to_i4_1.mp4", "s4_to_i4_2.mp4"] }
   ],
   "edges": [
-    { "from": "conn_0_1", "to": "tower_1",  "weight": 15, "heading": 0   },
-    { "from": "tower_1",  "to": "conn_0_1", "weight": 15, "heading": 180 },
+    { "from": "entrance", "to": "h1", "weight": 15, "heading": 0   },
+    { "from": "h1", "to": "entrance", "weight": 15, "heading": 180 },
 
-    { "from": "tower_1",  "to": "conn_1_2", "weight": 15, "heading": 0   },
-    { "from": "conn_1_2", "to": "tower_1",  "weight": 15, "heading": 180 },
+    { "from": "h1", "to": "i1", "weight": 15, "heading": 0   },
+    { "from": "i1", "to": "h1", "weight": 15, "heading": 180 },
 
-    { "from": "conn_1_2", "to": "tower_2",  "weight": 15, "heading": 0   },
-    { "from": "tower_2",  "to": "conn_1_2", "weight": 15, "heading": 180 },
+    { "from": "i1", "to": "h2", "weight": 15, "heading": 0   },
+    { "from": "h2", "to": "i1", "weight": 15, "heading": 180 },
 
-    { "from": "tower_2",  "to": "conn_2_3", "weight": 15, "heading": 0   },
-    { "from": "conn_2_3", "to": "tower_2",  "weight": 15, "heading": 180 },
+    { "from": "h2", "to": "i2", "weight": 15, "heading": 0   },
+    { "from": "i2", "to": "h2", "weight": 15, "heading": 180 },
 
-    { "from": "conn_2_3", "to": "tower_3",  "weight": 15, "heading": 0   },
-    { "from": "tower_3",  "to": "conn_2_3", "weight": 15, "heading": 180 },
+    { "from": "i2", "to": "h3", "weight": 15, "heading": 0   },
+    { "from": "h3", "to": "i2", "weight": 15, "heading": 180 },
 
-    { "from": "tower_3",  "to": "conn_3_4", "weight": 15, "heading": 0   },
-    { "from": "conn_3_4", "to": "tower_3",  "weight": 15, "heading": 180 },
+    { "from": "h3", "to": "i3", "weight": 15, "heading": 0   },
+    { "from": "i3", "to": "h3", "weight": 15, "heading": 180 },
 
-    { "from": "conn_3_4", "to": "tower_4",  "weight": 15, "heading": 0   },
-    { "from": "tower_4",  "to": "conn_3_4", "weight": 15, "heading": 180 },
+    { "from": "i3", "to": "h4", "weight": 15, "heading": 0   },
+    { "from": "h4", "to": "i3", "weight": 15, "heading": 180 },
 
-    { "from": "tower_4",  "to": "conn_4_5", "weight": 15, "heading": 0   },
-    { "from": "conn_4_5", "to": "tower_4",  "weight": 15, "heading": 180 }
+    { "from": "h4", "to": "i4", "weight": 15, "heading": 0   },
+    { "from": "i4", "to": "h4", "weight": 15, "heading": 180 },
+
+    { "from": "i4", "to": "h5", "weight": 15, "heading": 0   },
+    { "from": "h5", "to": "i4", "weight": 15, "heading": 180 },
+
+    { "from": "h5", "to": "exit", "weight": 15, "heading": 0   },
+    { "from": "exit", "to": "h5", "weight": 15, "heading": 180 },
+
+    { "from": "entrance", "to": "exit", "weight": 500, "heading": 0   },
+    { "from": "exit", "to": "entrance", "weight": 500, "heading": 180 },
+
+    { "from": "i1", "to": "s1", "weight": 6, "heading": 90  },
+    { "from": "s1", "to": "i1", "weight": 6, "heading": 270 },
+
+    { "from": "i2", "to": "s2", "weight": 6, "heading": 90  },
+    { "from": "s2", "to": "i2", "weight": 6, "heading": 270 },
+
+    { "from": "i3", "to": "s3", "weight": 6, "heading": 90  },
+    { "from": "s3", "to": "i3", "weight": 6, "heading": 270 },
+
+    { "from": "i4", "to": "s4", "weight": 6, "heading": 90  },
+    { "from": "s4", "to": "i4", "weight": 6, "heading": 270 }
   ]
 }

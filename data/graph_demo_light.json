@@ -1,0 +1,71 @@
+{
+  "nodes": [
+    { "id": "entrance", "label": "Entrance",    "type": "entrance",     "paths": ["ent_to_h1.mp4", "ent_to_exit.mp4"] },
+
+    { "id": "h1", "label": "eg201",     "type": "hallway",      "paths": ["ent_to_h1.mp4", "h1_to_i1.mp4", "i1_to_h1.mp4"] },
+    { "id": "i1", "label": "Cisco",     "type": "intersection", "paths": ["h1_to_i1.mp4", "i1_to_h1.mp4", "i1_to_h2.mp4", "h2_to_i1.mp4", "s1_to_i1.mp4", "s1_to_i1_1.mp4", "s1_to_i1_2.mp4", "s1_to_i1_2(1).mp4", "s1_to_i1_3.mp4"] },
+
+    { "id": "h2", "label": "Gameloft",  "type": "hallway",      "paths": ["i1_to_h2.mp4", "h2_to_i1.mp4", "h2_to_i2.mp4", "i2_to_h2.mp4"] },
+    { "id": "i2", "label": "Eg305",     "type": "intersection", "paths": ["h2_to_i2.mp4", "i2_to_h2.mp4", "i2_to_h3.mp4", "h3_to_i2.mp4", "s2_to_i2.mp4", "s2_to_i2_1.mp4", "s2_to_i2_2.mp4", "s2_to_i2_3.mp4", "s2_to_i2_3(1).mp4"] },
+
+    { "id": "h3", "label": "UIPath",    "type": "hallway",      "paths": ["i2_to_h3.mp4", "h3_to_i2.mp4", "h3_to_i3.mp4", "i3_to_h3.mp4"] },
+    { "id": "i3", "label": "Canti CTI", "type": "intersection", "paths": ["h3_to_i3.mp4", "i3_to_h3.mp4", "i3_to_h4.mp4", "h4_to_i3.mp4", "s3_to_i3.mp4", "s3_to_i3_1.mp4", "s3_to_i3_2.mp4"] },
+
+    { "id": "h4", "label": "Renewacad", "type": "hallway",      "paths": ["i3_to_h4.mp4", "h4_to_i3.mp4", "h3_to_i4.mp4", "i4_to_h3.mp4"] },
+    { "id": "i4", "label": "Honeywell", "type": "intersection", "paths": ["h3_to_i4.mp4", "i4_to_h3.mp4", "i4_to_h5.mp4", "h5_to_i4.mp4", "s4_to_i4.mp4", "s4_to_i4_1.mp4", "s4_to_i4_2.mp4"] },
+
+    { "id": "h5", "label": "eg216",     "type": "hallway",      "paths": ["i4_to_h5.mp4", "h5_to_i4.mp4", "h5_to_exit.mp4", "exit_to_h5.mp4"] },
+    { "id": "exit", "label": "Exit", "type": "exit", "recording": "exit.mp4", "paths": ["h5_to_exit.mp4", "exit_to_h5.mp4", "ent_to_exit.mp4", "exit_to_ent.mp4"] },
+
+    { "id": "s1", "label": "Stairwell 1", "type": "stairwell", "paths": ["s1_to_i1.mp4", "s1_to_i1_1.mp4", "s1_to_i1_2.mp4", "s1_to_i1_2(1).mp4", "s1_to_i1_3.mp4"] },
+    { "id": "s2", "label": "Stairwell 2", "type": "stairwell", "recording": "s2.mp4", "paths": ["s2_to_i2.mp4", "s2_to_i2_1.mp4", "s2_to_i2_2.mp4", "s2_to_i2_3.mp4", "s2_to_i2_3(1).mp4"] },
+    { "id": "s3", "label": "Stairwell 3", "type": "stairwell", "recording": "s3.mp4", "paths": ["s3_to_i3.mp4", "s3_to_i3_1.mp4", "s3_to_i3_2.mp4"] },
+    { "id": "s4", "label": "Stairwell 4", "type": "stairwell", "recording": "s4.mp4", "paths": ["s4_to_i4.mp4", "s4_to_i4_1.mp4", "s4_to_i4_2.mp4"] }
+  ],
+  "edges": [
+    { "from": "entrance", "to": "h1", "weight": 15, "heading": 0   },
+    { "from": "h1", "to": "entrance", "weight": 15, "heading": 180 },
+
+    { "from": "h1", "to": "i1", "weight": 15, "heading": 0   },
+    { "from": "i1", "to": "h1", "weight": 15, "heading": 180 },
+
+    { "from": "i1", "to": "h2", "weight": 15, "heading": 0   },
+    { "from": "h2", "to": "i1", "weight": 15, "heading": 180 },
+
+    { "from": "h2", "to": "i2", "weight": 15, "heading": 0   },
+    { "from": "i2", "to": "h2", "weight": 15, "heading": 180 },
+
+    { "from": "i2", "to": "h3", "weight": 15, "heading": 0   },
+    { "from": "h3", "to": "i2", "weight": 15, "heading": 180 },
+
+    { "from": "h3", "to": "i3", "weight": 15, "heading": 0   },
+    { "from": "i3", "to": "h3", "weight": 15, "heading": 180 },
+
+    { "from": "i3", "to": "h4", "weight": 15, "heading": 0   },
+    { "from": "h4", "to": "i3", "weight": 15, "heading": 180 },
+
+    { "from": "h4", "to": "i4", "weight": 15, "heading": 0   },
+    { "from": "i4", "to": "h4", "weight": 15, "heading": 180 },
+
+    { "from": "i4", "to": "h5", "weight": 15, "heading": 0   },
+    { "from": "h5", "to": "i4", "weight": 15, "heading": 180 },
+
+    { "from": "h5", "to": "exit", "weight": 15, "heading": 0   },
+    { "from": "exit", "to": "h5", "weight": 15, "heading": 180 },
+
+    { "from": "entrance", "to": "exit", "weight": 500, "heading": 0   },
+    { "from": "exit", "to": "entrance", "weight": 500, "heading": 180 },
+
+    { "from": "i1", "to": "s1", "weight": 6, "heading": 90  },
+    { "from": "s1", "to": "i1", "weight": 6, "heading": 270 },
+
+    { "from": "i2", "to": "s2", "weight": 6, "heading": 90  },
+    { "from": "s2", "to": "i2", "weight": 6, "heading": 270 },
+
+    { "from": "i3", "to": "s3", "weight": 6, "heading": 90  },
+    { "from": "s3", "to": "i3", "weight": 6, "heading": 270 },
+
+    { "from": "i4", "to": "s4", "weight": 6, "heading": 90  },
+    { "from": "s4", "to": "i4", "weight": 6, "heading": 270 }
+  ]
+}

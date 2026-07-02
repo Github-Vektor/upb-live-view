@@ -1,8 +1,18 @@
 import { useState } from 'react'
 import { getNavigableNodes } from '../navigation/graph'
-import type { RouteStep } from '../navigation/types'
+import type { NodeType, RouteStep } from '../navigation/types'
 import SchematicMap from './SchematicMap'
 import './MenuView.css'
+
+const TYPE_LABEL: Record<NodeType, string> = {
+  entrance:     'Entrance',
+  exit:         'Exit',
+  hallway:      'Hallway',
+  intersection: 'Intersection',
+  stairwell:    'Stairwell',
+  room:         'Room',
+  waypoint:     'Waypoint',
+}
 
 interface Props {
   currentNodeId: string
@@ -60,6 +70,7 @@ export default function MenuView({ currentNodeId, destinationId, route, onNaviga
                 onClick={() => onNavigate(node.id)}
               >
                 <span className="menu-dest-label">{node.label}</span>
+                <span className="menu-dest-type">{TYPE_LABEL[node.type]}</span>
               </button>
             </li>
           ))}

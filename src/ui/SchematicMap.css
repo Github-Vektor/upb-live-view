@@ -1,8 +1,8 @@
 .schematic-map {
-  background: #0d0d16;
-  border: 1px solid #1e1e2e;
+  background: var(--bg-alt);
+  border: 1px solid var(--border-soft);
   border-radius: 0.75rem;
-  padding: 0.5rem 0.25rem 0;
+  padding: 0.5rem 0.25rem 0.35rem;
   overflow: hidden;
 }
 

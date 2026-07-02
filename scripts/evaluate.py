@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
-from collections import defaultdict
+import time
+from collections import Counter, defaultdict, deque
 from pathlib import Path
 
 import cv2
@@ -42,6 +44,10 @@ from _localise_core import load_index, make_matcher, make_extractor, resize_gray
 
 ROOT    = Path(__file__).parent.parent
 DB_PATH = ROOT / "data" / "feature_index.db"
+
+# Temporal smoothing window (frames). Mirrors the client, which reports the
+# majority node over its last few localisation results to suppress flicker.
+SMOOTH_WINDOW = 5
 
 # Default test path: recording goes conn_4_5 → conn_0_1
 DEFAULT_PATH = [
@@ -77,7 +83,13 @@ def build_crossings(path: list[str], duration_sec: float) -> list[float]:
 
 
 def gt_node_at(timestamp: float, path: list[str], crossings: list[float]) -> str:
-    """Return the ground-truth node for a given timestamp."""
+    """Return the ground-truth node for a given timestamp.
+
+    Before the first crossing the camera is still at the start node, so that
+    interval maps to path[0] (not path[-1]); after the last crossing it maps to
+    the final node path[-1]."""
+    if timestamp < crossings[0]:
+        return path[0]
     for i in range(len(crossings) - 1):
         if crossings[i] <= timestamp < crossings[i + 1]:
             return path[i]
@@ -107,23 +119,60 @@ def _score_frame(
     accum: dict,
 ) -> None:
     """Match one frame and accumulate counters into accum."""
+    t0 = time.perf_counter()
     scores = query_frame(gray, index)
+    latency_ms = (time.perf_counter() - t0) * 1000.0
+
     accum["total"] += 1
+    accum["latencies"].append(latency_ms)
 
     if not scores:
         accum["no_match"] += 1
         accum["per_node"][gt][1] += 1
         accum["confusion"][gt]["<no_match>"] += 1
+        # None vote keeps the temporal sequence aligned with the frame order.
+        accum["seq"].append((gt, None))
         return
 
     top_nodes = [n for _, n in scores[:TOP_K]]
-    pred = top_nodes[0]
+    pred = top_nodes[0]                                   # best single frame (retrieval Top-1)
+    vote = Counter(top_nodes).most_common(1)[0][0]        # majority over Top-K = deployed estimate
+    confidence = top_nodes.count(vote) / len(top_nodes)
+
     accum["top1"]  += pred == gt
     accum["top3"]  += gt in top_nodes[:3]
     accum["neigh"] += gt in adjacent_nodes(pred, path)
+    accum["voted"] += vote == gt
+    accum["confidences"].append(confidence)
     accum["per_node"][gt][0] += pred == gt
     accum["per_node"][gt][1] += 1
     accum["confusion"][gt][pred] += 1
+    accum["seq"].append((gt, vote))
+
+
+def smoothed_accuracy(seq: list[tuple[str, str | None]], window: int) -> tuple[int, int]:
+    """Apply a sliding-window majority vote over the per-query node estimates,
+    matching the client's temporal smoothing. Returns (correct, total)."""
+    recent: deque = deque(maxlen=window)
+    correct = 0
+    for gt, vote in seq:
+        if vote is not None:
+            recent.append(vote)
+        smoothed = Counter(recent).most_common(1)[0][0] if recent else None
+        correct += smoothed == gt
+    return correct, len(seq)
+
+
+def latency_stats(latencies: list[float]) -> dict:
+    if not latencies:
+        return {"mean": 0.0, "median": 0.0, "p95": 0.0}
+    ordered = sorted(latencies)
+    p95 = ordered[min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))]
+    return {
+        "mean":   round(statistics.fmean(latencies), 1),
+        "median": round(statistics.median(latencies), 1),
+        "p95":    round(p95, 1),
+    }
 
 
 def _print_report(path: list[str], accum: dict) -> None:
@@ -132,11 +181,19 @@ def _print_report(path: list[str], accum: dict) -> None:
         print("No frames evaluated.")
         return
 
+    sm_correct, _ = smoothed_accuracy(accum["seq"], SMOOTH_WINDOW)
+    lat  = latency_stats(accum["latencies"])
+    conf = round(statistics.fmean(accum["confidences"]), 2) if accum["confidences"] else 0.0
+
     print("=" * 56)
     print(f"  Frames evaluated : {total}  (no match: {accum['no_match']})")
     print(f"  Top-1 accuracy   : {accum['top1']}/{total} = {100*accum['top1']/total:.1f}%")
     print(f"  Top-3 accuracy   : {accum['top3']}/{total} = {100*accum['top3']/total:.1f}%")
     print(f"  Neighbour acc.   : {accum['neigh']}/{total} = {100*accum['neigh']/total:.1f}%")
+    print(f"  Voted (top-{TOP_K})    : {accum['voted']}/{total} = {100*accum['voted']/total:.1f}%")
+    print(f"  Voted + smoothing: {sm_correct}/{total} = {100*sm_correct/total:.1f}%  (window {SMOOTH_WINDOW})")
+    print(f"  Mean confidence  : {conf}")
+    print(f"  Latency / frame  : mean {lat['mean']} ms | median {lat['median']} ms | p95 {lat['p95']} ms")
     print("=" * 56)
 
     print(f"\n{'Node':<22} {'Correct':>7} {'Total':>6} {'Recall':>7}")
@@ -169,6 +226,9 @@ def evaluate(
     crossings: list[float] | None,
     fps_target: float,
     index: list,
+    meta: dict | None = None,
+    json_path: str | None = None,
+    end_override: float | None = None,
 ) -> None:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -186,15 +246,17 @@ def evaluate(
     else:
         print("Ground truth: manual crossings provided")
 
-    # Stop at last crossing — frames beyond it belong to a return journey or
-    # idle period and have no reliable ground truth label.
-    end_sec = crossings[-1]
+    # By default stop at the last crossing, but the final node has no closing
+    # crossing, so its segment would be missed. Pass --end (the last usable
+    # second before a U-turn / unusable tail) to evaluate that final segment too.
+    end_sec = end_override if end_override is not None else crossings[-1]
     print(f"Video: {duration:.1f}s, evaluating 0–{end_sec:.1f}s at {fps_target} fps\n")
 
     accum: dict = {
-        "total": 0, "no_match": 0, "top1": 0, "top3": 0, "neigh": 0,
+        "total": 0, "no_match": 0, "top1": 0, "top3": 0, "neigh": 0, "voted": 0,
         "per_node": defaultdict(lambda: [0, 0]),
         "confusion": defaultdict(lambda: defaultdict(int)),
+        "latencies": [], "confidences": [], "seq": [],
     }
 
     frame_idx = 0
@@ -210,6 +272,39 @@ def evaluate(
     cap.release()
     _print_report(path, accum)
 
+    if json_path:
+        _dump_json(json_path, video_path, path, fps_target, accum, meta or {})
+        print(f"\nMetrics written to {json_path}")
+
+
+def _dump_json(json_path: str, video_path: str, path: list[str],
+               fps_target: float, accum: dict, meta: dict) -> None:
+    total = accum["total"] or 1
+    sm_correct, _ = smoothed_accuracy(accum["seq"], SMOOTH_WINDOW)
+    result = {
+        "feature_type":   meta.get("feature_type", "ORB"),
+        "index_frames":   int(meta.get("total_frames", 0)) or None,
+        "build_seconds":  float(meta["build_seconds"]) if "build_seconds" in meta else None,
+        "condition":      meta.get("condition"),
+        "video":          Path(video_path).name,
+        "fps_evaluated":  fps_target,
+        "frames":         accum["total"],
+        "no_match":       accum["no_match"],
+        "smooth_window":  SMOOTH_WINDOW,
+        "accuracy_pct": {
+            "top1":            round(100 * accum["top1"]  / total, 1),
+            "top3":            round(100 * accum["top3"]  / total, 1),
+            "neighbour":       round(100 * accum["neigh"] / total, 1),
+            "voted":           round(100 * accum["voted"] / total, 1),
+            "voted_smoothed":  round(100 * sm_correct     / total, 1),
+        },
+        "mean_confidence": round(statistics.fmean(accum["confidences"]), 3) if accum["confidences"] else 0.0,
+        "latency_ms":      latency_stats(accum["latencies"]),
+        "per_node":        {n: accum["per_node"][n] for n in path},
+        "confusion":       {gt: dict(row) for gt, row in accum["confusion"].items()},
+    }
+    Path(json_path).write_text(json.dumps(result, indent=2))
+
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -224,6 +319,14 @@ def main():
                         help="Comma-separated node path (default: conn_4_5→conn_0_1)")
     parser.add_argument("--crossings",  type=str,   default=None,
                         help="JSON file with manual crossing timestamps")
+    parser.add_argument("--db",         type=str,   default=str(DB_PATH),
+                        help="Index path to evaluate (default: data/feature_index.db)")
+    parser.add_argument("--json",       type=str,   default=None,
+                        help="Write all metrics to this JSON file (for tables/figures)")
+    parser.add_argument("--end",        type=float, default=None,
+                        help="Last second to evaluate (default: last crossing). Set this to "
+                             "the last usable second (e.g. just before a U-turn) so the final "
+                             "node's segment is also evaluated.")
     args = parser.parse_args()
 
     path = [n.strip() for n in args.path.split(",")] if args.path else DEFAULT_PATH
@@ -234,18 +337,19 @@ def main():
         path      = data["path"]
         crossings = data["crossings_sec"]
 
-    if not DB_PATH.exists():
-        print(f"ERROR: index not found at {DB_PATH}. Run build_index.py first.")
+    db_path = Path(args.db)
+    if not db_path.exists():
+        print(f"ERROR: index not found at {db_path}. Run build_index.py first.")
         return
 
     global _extractor, _bf
     print("Loading index…")
-    index, meta = load_index(DB_PATH)
+    index, meta = load_index(db_path)
     _extractor  = make_extractor(meta)
     _bf         = make_matcher(meta)
     print(f"{len(index)} frames in index ({meta.get('feature_type', 'ORB')}).\n")
 
-    evaluate(args.video, path, crossings, args.fps, index)
+    evaluate(args.video, path, crossings, args.fps, index, meta, args.json, args.end)
 
 
 if __name__ == "__main__":

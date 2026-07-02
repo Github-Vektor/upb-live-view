@@ -4,11 +4,74 @@
   padding: 0;
 }
 
+/* --- Theme variables ---------------------------------------------------- */
+/* Dark is the default (also applied via .theme-dark once App mounts); light
+   is opted into via the .theme-light class on <html>, toggled by ThemeToggle
+   and persisted to localStorage. */
+:root,
+.theme-dark {
+  --bg:               #000;
+  --bg-alt:           #0d0d12;
+  --surface:          #12121a;
+  --surface-alt:      #181820;
+  --surface-2:        #1a1a24;
+  --border:           #242430;
+  --border-soft:      #1e1e2e;
+  --text:             #fff;
+  --text-dim:         #ddd;
+  --text-muted:       #888;
+  --text-faint:       #555;
+  --accent:           #00aaff;
+  --accent-strong:    #66ccff;
+  --accent-soft:      rgba(0, 170, 255, 0.15);
+  --accent-soft-2:    rgba(0, 170, 255, 0.25);
+  --success:          #00cc66;
+  --success-strong:   #66ffaa;
+  --success-soft:     rgba(0, 200, 100, 0.2);
+  --danger:           #ff5050;
+  --danger-strong:    #ff9999;
+  --danger-soft:      rgba(255, 80, 80, 0.15);
+  --overlay:          rgba(0, 0, 0, 0.6);
+  --overlay-strong:   rgba(0, 0, 0, 0.88);
+  --surface-translucent:        rgba(255, 255, 255, 0.15);
+  --surface-translucent-strong: rgba(255, 255, 255, 0.28);
+  --bar-bg:           rgba(10, 10, 20, 0.82);
+}
+
+.theme-light {
+  --bg:               #f4f5f7;
+  --bg-alt:           #eceef2;
+  --surface:          #ffffff;
+  --surface-alt:      #eef0f4;
+  --surface-2:        #e6e8ec;
+  --border:           #d7dae0;
+  --border-soft:      #e1e3e8;
+  --text:             #16161d;
+  --text-dim:         #33333d;
+  --text-muted:       #666a72;
+  --text-faint:       #9297a0;
+  --accent:           #0077cc;
+  --accent-strong:    #005fa3;
+  --accent-soft:      rgba(0, 119, 204, 0.12);
+  --accent-soft-2:    rgba(0, 119, 204, 0.18);
+  --success:          #0a8a4d;
+  --success-strong:   #067038;
+  --success-soft:     rgba(10, 138, 77, 0.14);
+  --danger:           #cc2b2b;
+  --danger-strong:    #a31d1d;
+  --danger-soft:      rgba(204, 43, 43, 0.12);
+  --overlay:          rgba(255, 255, 255, 0.55);
+  --overlay-strong:   rgba(255, 255, 255, 0.9);
+  --surface-translucent:        rgba(20, 20, 30, 0.08);
+  --surface-translucent-strong: rgba(20, 20, 30, 0.16);
+  --bar-bg:           rgba(255, 255, 255, 0.88);
+}
+
 html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000;
+  background: var(--bg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #fff;
+  color: var(--text);
 }

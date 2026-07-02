@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import type { VP } from './useHallwayDirection'
+import type { VP, Motion } from './useHallwayDirection'
+import type { DirectionNudge } from '../navigation/directionNudge'
 
 export interface ArrowOverlayOptions {
   /**
@@ -19,6 +20,37 @@ export interface ArrowOverlayExtras {
   videoRef?: React.RefObject<HTMLVideoElement | null>
   /** Fused vanishing point (normalised image coords) the chevrons should aim at. */
   targetRef?: React.RefObject<VP>
+  /** Manual i/j/k/l/o nudge (see useDirectionNudge) — its yaw applies on top of
+   *  headingDeg whenever `targetRef` isn't driving the arrow (e.g. a w/a/s/d
+   *  override), so the same nudge keeps working no matter which is active. */
+  nudgeRef?: React.RefObject<DirectionNudge>
+  /** Pure wobble (parallax dead-reckoning) yaw/pitch, in degrees — added on
+   *  top of headingDeg whenever `targetRef` isn't driving the arrow, so a
+   *  manual w/a/s/d override still reacts to the camera's natural wobble
+   *  instead of holding a perfectly rigid heading. */
+  wobbleRef?: React.RefObject<Motion>
+}
+
+// How quickly the arrow eases toward a new heading when it isn't following a
+// tracked vanishing point (manual w/a/s/d turns, or a route-heading change on
+// the live camera view) — fraction of the remaining angular gap closed per
+// frame. Lower = smoother/slower, higher = snappier.
+const TURN_SMOOTH = 0.12
+
+// Resting vertical aim of the floor-projected chevrons (Google Live View
+// style — camera at eye height, tilted down at the floor just ahead). Pitch
+// nudge/wobble can lift the arrow above this but never push it lower.
+const BASE_TARGET_Y = -0.29
+
+// How much of the raw wobble signal (which can drift up to ±40° yaw on its
+// own) reaches the arrow when it's headingDeg-driven. Kept well under 1 so
+// wobble reads as natural jitter around the current heading rather than
+// something that can swamp or cancel out a deliberate w/a/s/d turn.
+const WOBBLE_INFLUENCE = 0.3
+
+/** Shortest signed angular distance from `a` to `b`, in degrees, in (-180, 180]. */
+function angleDelta(a: number, b: number): number {
+  return ((b - a) % 360 + 540) % 360 - 180
 }
 
 function buildArrowShape(): THREE.Shape {
@@ -133,6 +165,11 @@ export function useArrowOverlay(
     const ro = new ResizeObserver(fitCanvas)
     if (canvas.parentElement) ro.observe(canvas.parentElement)
 
+    // Eased heading used whenever the arrow points per headingDeg rather than
+    // a tracked vanishing point — lets manual turns (and route heading
+    // changes) rotate smoothly instead of snapping instantly.
+    let smoothedHeading: number | null = null
+
     // --- Render loop ------------------------------------------------------
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate)
@@ -155,10 +192,47 @@ export function useArrowOverlay(
           _v.set(target.x * 2 - 1, -(target.y * 2 - 1), 0.5).unproject(camera)
           _dir.copy(_v).sub(camera.position).normalize()
           _target.copy(camera.position).addScaledVector(_dir, 10)
+          smoothedHeading = null  // re-seed from scratch if we fall back to headingDeg later
         } else {
-          // No target (e.g. live camera view): point forward per the route heading.
-          const th = THREE.MathUtils.degToRad(headingDeg)
-          _target.set(Math.sin(th) * 0.95, -0.29, -Math.cos(th) * 0.95)
+          // No target (e.g. live camera view, or a manual w/a/s/d override):
+          // point forward per the route/manual heading, easing toward it
+          // rather than snapping so turns read smoothly.
+          if (smoothedHeading === null) smoothedHeading = headingDeg
+          smoothedHeading += angleDelta(smoothedHeading, headingDeg) * TURN_SMOOTH
+          smoothedHeading = ((smoothedHeading % 360) + 360) % 360
+
+          // The i/j/k/l nudge applies here too (not just to the tracked
+          // vanishing point above), so it keeps working while a w/a/s/d
+          // override — or any other headingDeg-driven heading — is active.
+          // Yaw (j/l) steers left/right; pitch (i/k) steers up/down — without
+          // this, up/down had no effect at all whenever this branch (rather
+          // than the tracked vanishing point) was driving the arrow.
+          const activeNudge = extrasRef.current?.nudgeRef?.current
+          const nudgeYawDeg  = activeNudge?.yawDeg ?? 0
+          const nudgePitch   = activeNudge?.pitchOffset ?? 0
+
+          // The camera's natural wobble (parallax dead-reckoning) rides on
+          // top too, so a manual override still reacts to how the phone is
+          // actually moving instead of holding a perfectly rigid heading.
+          // Damped to a fraction of its raw range (which can drift up to
+          // ±40° yaw) — at full strength it could swing past, or even
+          // cancel out, a deliberate 30° a/d turn, making "d" look like it
+          // sometimes didn't turn the arrow right at all. Both are in
+          // degrees; pitch is scaled down to the same rough magnitude as
+          // `nudgePitch` (a raw offset, not degrees) using the hook's own
+          // pitch gain (2x VFOV_DEG/2 = 40). Motion.pitch is "+ = higher in
+          // frame" (opposite sign to nudgePitch, which is "+ = down"), so
+          // it's added rather than subtracted.
+          const wobble = extrasRef.current?.wobbleRef?.current
+          const wobbleYawDeg = (wobble?.yaw ?? 0) * WOBBLE_INFLUENCE
+          const wobblePitch  = wobble ? (wobble.pitch / 40) * WOBBLE_INFLUENCE : 0
+
+          const th = THREE.MathUtils.degToRad(smoothedHeading + nudgeYawDeg + wobbleYawDeg)
+          // Nudge/wobble can lift the arrow above its resting floor-projected
+          // tilt (BASE_TARGET_Y), but never push it further down than that —
+          // it should never point downward more steeply than the baseline.
+          const y = Math.max(BASE_TARGET_Y - nudgePitch + wobblePitch, BASE_TARGET_Y)
+          _target.set(Math.sin(th) * 0.95, y, -Math.cos(th) * 0.95)
             .multiplyScalar(10).add(pivot.position)
         }
         pivot.lookAt(_target)

@@ -4,10 +4,11 @@
   left: 0;
   right: 0;
   padding: 0.75rem 1rem 1.25rem;
-  background: rgba(10, 10, 20, 0.82);
+  background: var(--bar-bg);
+  color: var(--text);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -24,7 +25,7 @@
 
 .nav-bar__progress {
   font-size: 0.7rem;
-  color: #888;
+  color: var(--text-muted);
   text-align: center;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -52,7 +53,7 @@
 
 .nav-bar__verb {
   font-size: 0.75rem;
-  color: #aaa;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -60,12 +61,12 @@
 .nav-bar__dest {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--text);
 }
 
 .nav-bar__dist {
   font-size: 0.85rem;
-  color: #00aaff;
+  color: var(--accent);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -79,9 +80,9 @@
 .nav-bar__btn {
   padding: 0.4rem 0.85rem;
   border-radius: 1rem;
-  border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.08);
-  color: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface-translucent);
+  color: var(--text);
   font-size: 0.85rem;
   cursor: pointer;
   transition: background 0.15s;
@@ -93,15 +94,15 @@
 }
 
 .nav-bar__btn:not(:disabled):active {
-  background: rgba(255,255,255,0.18);
+  background: var(--surface-translucent-strong);
 }
 
 .nav-bar__btn--next {
-  background: rgba(0, 170, 255, 0.25);
+  background: var(--accent-soft-2);
   border-color: rgba(0, 170, 255, 0.4);
 }
 
 .nav-bar__btn--cancel {
-  background: rgba(255, 80, 80, 0.15);
+  background: var(--danger-soft);
   border-color: rgba(255, 80, 80, 0.3);
 }

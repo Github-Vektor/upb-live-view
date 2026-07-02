@@ -7,10 +7,10 @@
   height: 3.25rem;
   border-radius: 50%;
   border: none;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--surface-translucent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  color: #fff;
+  color: var(--text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -20,7 +20,7 @@
 }
 
 .toggle-btn:active {
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--surface-translucent-strong);
 }
 
 .toggle-btn svg {

@@ -17,9 +17,9 @@
 }
 
 .loc-badge--ok {
-  background: rgba(0, 180, 100, 0.25);
+  background: var(--success-soft);
   border: 1px solid rgba(0, 220, 120, 0.35);
-  color: #afffce;
+  color: var(--success-strong);
 }
 
 .loc-badge--warn {
@@ -29,9 +29,9 @@
 }
 
 .loc-badge--dim {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #888;
+  background: var(--surface-translucent);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
 }
 
 .loc-badge__conf {

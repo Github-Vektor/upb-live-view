@@ -4,7 +4,8 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #000;
+  background: var(--bg);
+  color: var(--text);
 }
 
 /* Top bar */
@@ -13,8 +14,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.6rem 1rem;
-  background: rgba(10, 10, 18, 0.9);
-  border-bottom: 1px solid #1e1e2e;
+  background: var(--bar-bg);
+  border-bottom: 1px solid var(--border-soft);
   flex-shrink: 0;
   z-index: 10;
 }
@@ -23,7 +24,7 @@
 .test-open-btn {
   background: none;
   border: none;
-  color: #00aaff;
+  color: var(--accent);
   font-size: 0.9rem;
   cursor: pointer;
   padding: 0.2rem 0.1rem;
@@ -37,7 +38,7 @@
 .test-title {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #ccc;
+  color: var(--text-dim);
 }
 
 /* Video stage */
@@ -45,7 +46,7 @@
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #000;
+  background: var(--bg);
   min-height: 0;
 }
 
@@ -75,7 +76,9 @@
   z-index: 6;
 }
 
-/* Debug: detected hallway vanishing point */
+/* Debug: detected hallway vanishing point(s) — GRID/WOBBLE/FUSED. Must sit
+   above .test-lines (z-index 6) or the opaque debug canvas hides all three,
+   leaving only the single crosshair drawn inside that canvas visible. */
 .vp-marker {
   position: absolute;
   width: 18px;
@@ -86,7 +89,7 @@
   box-shadow: 0 0 8px rgba(255, 122, 0, 0.8), inset 0 0 0 4px rgba(255, 122, 0, 0.25);
   pointer-events: none;
   transition: opacity 0.2s;
-  z-index: 5;
+  z-index: 7;
 }
 
 .vp-marker__label {
@@ -110,18 +113,18 @@
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  color: #555;
+  color: var(--text-faint);
   font-size: 0.95rem;
   cursor: pointer;
 }
 
 .test-empty-icon {
   font-size: 3rem;
-  color: #333;
+  color: var(--text-faint);
 }
 
 .test-empty-btn {
-  background: #00aaff;
+  background: var(--accent);
   border: none;
   color: #000;
   font-size: 0.9rem;
@@ -132,9 +135,9 @@
 }
 
 .test-empty-btn--secondary {
-  background: #1a1a24;
-  border: 1px solid #2a2a3a;
-  color: #888;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   font-weight: 400;
 }
 
@@ -146,14 +149,15 @@
   align-items: center;
   justify-content: center;
   font-size: 1rem;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay);
+  color: var(--text);
   letter-spacing: 0.02em;
 }
 
 .camera-overlay-message--warn {
   color: #ffc87a;
   font-size: 0.85rem;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--overlay);
   inset: auto;
   bottom: 5rem;
   left: 50%;
@@ -169,10 +173,10 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 0.6rem 1.4rem;
-  background: rgba(0, 170, 255, 0.2);
+  background: var(--accent-soft);
   border: 1px solid rgba(0, 170, 255, 0.45);
   border-radius: 2rem;
-  color: #cce8ff;
+  color: var(--accent-strong);
   font-size: 0.9rem;
   cursor: pointer;
   backdrop-filter: blur(8px);
@@ -185,15 +189,15 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.6rem 0.75rem;
-  background: rgba(10, 10, 18, 0.92);
-  border-top: 1px solid #1e1e2e;
+  background: var(--bar-bg);
+  border-top: 1px solid var(--border-soft);
   flex-shrink: 0;
 }
 
 .test-play-btn {
   background: none;
   border: none;
-  color: #fff;
+  color: var(--text);
   font-size: 1.3rem;
   cursor: pointer;
   padding: 0 0.25rem;
@@ -202,7 +206,7 @@
 
 .test-time {
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-muted);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   min-width: 2.5rem;
@@ -210,15 +214,15 @@
 
 .test-scrubber {
   flex: 1;
-  accent-color: #00aaff;
+  accent-color: var(--accent);
   cursor: pointer;
   height: 3px;
 }
 
 .test-speed {
-  background: #1a1a24;
-  border: 1px solid #2a2a3a;
-  color: #aaa;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   font-size: 0.78rem;
   border-radius: 0.35rem;
   padding: 0.15rem 0.3rem;
